@@ -4,8 +4,8 @@ from src.config import TARGET_COLUMN, GENE_COLUMN, MIRNA_COLUMN
 from src.data.load_data import build_dataset_bundle
 from src.features.basic_features import compute_sequence_features
 from src.features.sequence_match_features import compute_match_features
-from src.models.train_lgbm import train_with_cv, optimize_threshold, save_artifacts
-from src.models.predict import predict_and_submit
+from src.models.train_ensemble import train_ensemble, optimize_thresholds, save_ensemble_artifacts
+from src.models.predict import predict_and_submit, predict_ensemble
 
 
 def main():
@@ -33,20 +33,35 @@ def main():
     print(f"feature_count={len(train_features.columns)}")
 
     labels = bundle.train[TARGET_COLUMN].copy()
-
-    print("=== training ===")
-    oof, mean_f1, fold_scores, models = train_with_cv(train_features, labels)
-    print(f"fold_scores={[round(s, 4) for s in fold_scores]}")
-    print(f"mean_cv_f1@{0.5}={mean_f1:.4f}")
-
-    best_threshold, best_f1 = optimize_threshold(oof, labels)
-    print(f"best_threshold={best_threshold:.3f} best_f1={best_f1:.4f}")
-
-    save_artifacts(oof, models, fold_scores, best_threshold)
-
-    print("=== generating submission ===")
     test_meta = bundle.test[[GENE_COLUMN, MIRNA_COLUMN]]
-    predict_and_submit(test_features, test_meta, models, best_threshold)
+
+    print("=== training ensemble ===")
+    results = train_ensemble(train_features, labels)
+    results = optimize_thresholds(results, labels)
+
+    lt = results["lgbm_oof_best_threshold"]
+    xt = results["xgb_oof_best_threshold"]
+    et = results["ensemble_oof_best_threshold"]
+
+    print(f"lgbm fold_scores={[round(s, 4) for s in results['lgbm_fold_scores']]}")
+    print(f"lgbm best_f1={results['lgbm_oof_best_f1']:.4f} threshold={lt:.3f}")
+    print(f"xgb  fold_scores={[round(s, 4) for s in results['xgb_fold_scores']]}")
+    print(f"xgb  best_f1={results['xgb_oof_best_f1']:.4f} threshold={xt:.3f}")
+    print(f"ensemble best_f1={results['ensemble_oof_best_f1']:.4f} threshold={et:.3f}")
+
+    save_ensemble_artifacts(results)
+
+    print("=== generating submissions ===")
+    predict_and_submit(test_features, test_meta, results["lgbm_models"], lt, "submission_lgbm.csv")
+    predict_and_submit(test_features, test_meta, results["xgb_models"], xt, "submission_xgb.csv")
+    predict_ensemble(
+        test_features,
+        test_meta,
+        results["lgbm_models"],
+        results["xgb_models"],
+        et,
+        "submission_ensemble.csv",
+    )
 
 
 if __name__ == "__main__":
