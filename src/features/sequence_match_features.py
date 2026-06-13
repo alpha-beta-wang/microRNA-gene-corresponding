@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 
 from src.config import GENE_SEQUENCE_COLUMN, MIRNA_SEQUENCE_COLUMN
@@ -8,6 +7,36 @@ COMPLEMENT = str.maketrans("ACGUT", "UGCAA")
 
 def _reverse_complement(seq: str) -> str:
     return seq.translate(COMPLEMENT)[::-1]
+
+
+def _max_consecutive_match(short: str, long: str) -> int:
+    if not short or not long:
+        return 0
+    best = 0
+    for i in range(len(long) - len(short) + 1):
+        cur = 0
+        for j in range(len(short)):
+            if long[i + j] == short[j]:
+                cur += 1
+            else:
+                best = max(best, cur)
+                cur = 0
+        best = max(best, cur)
+    return best
+
+
+def _count_substring(needle: str, haystack: str) -> int:
+    if not needle or not haystack:
+        return 0
+    count = 0
+    start = 0
+    while True:
+        idx = haystack.find(needle, start)
+        if idx == -1:
+            break
+        count += 1
+        start = idx + 1
+    return count
 
 
 def compute_match_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -30,18 +59,10 @@ def compute_match_features(df: pd.DataFrame) -> pd.DataFrame:
         for m, g in zip(mirna_seq, gene_seq)
     ]
 
-    mirrors = pd.DataFrame({
-        MIRNA_SEQUENCE_COLUMN: mirna_seq,
-        GENE_SEQUENCE_COLUMN: gene_seq,
-    })
-    features["mirna_revcomp_in_gene"] = mirrors.apply(
-        lambda r: int(
-            _reverse_complement(r[MIRNA_SEQUENCE_COLUMN]) in r[GENE_SEQUENCE_COLUMN]
-        )
-        if len(r[MIRNA_SEQUENCE_COLUMN]) > 0 and len(r[GENE_SEQUENCE_COLUMN]) > 0
-        else 0,
-        axis=1,
-    )
+    features["mirna_revcomp_in_gene"] = [
+        int(_reverse_complement(m) in g) if len(m) > 0 and len(g) > 0 else 0
+        for m, g in zip(mirna_seq, gene_seq)
+    ]
 
     features["gene_N_ratio"] = [
         g.count("N") / len(g) if len(g) > 0 else 0.0 for g in gene_seq
@@ -57,6 +78,21 @@ def compute_match_features(df: pd.DataFrame) -> pd.DataFrame:
     ]
     features["seed_U_count"] = [
         m[1:8].count("U") if len(m) >= 8 else 0 for m in mirna_seq
+    ]
+
+    features["seed_occurrence_count"] = [
+        _count_substring(m[1:8], g) if len(m) >= 8 else 0
+        for m, g in zip(mirna_seq, gene_seq)
+    ]
+
+    features["seed_max_consecutive"] = [
+        _max_consecutive_match(m[1:8], g) if len(m) >= 8 else 0
+        for m, g in zip(mirna_seq, gene_seq)
+    ]
+
+    features["mirna_max_consecutive"] = [
+        _max_consecutive_match(m, g)
+        for m, g in zip(mirna_seq, gene_seq)
     ]
 
     return features.fillna(0)
