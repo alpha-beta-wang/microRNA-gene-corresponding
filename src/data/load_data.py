@@ -63,12 +63,19 @@ def load_mirna_sequences() -> pd.DataFrame:
     return frame.drop_duplicates(subset=[MIRNA_COLUMN], keep="first")
 
 
+_LABEL_MAP = {"Functional MTI": 1, "Non-Functional MTI": 0}
+
+
 def _normalize_pair_columns(frame: pd.DataFrame) -> pd.DataFrame:
     normalized = frame.copy()
     normalized[GENE_COLUMN] = normalized[GENE_COLUMN].astype(str).str.strip()
     normalized[MIRNA_COLUMN] = normalized[MIRNA_COLUMN].astype(str).str.strip()
+    if "label" in normalized.columns:
+        normalized = normalized.rename(columns={"label": TARGET_COLUMN})
     if TARGET_COLUMN in normalized.columns:
-        normalized[TARGET_COLUMN] = normalized[TARGET_COLUMN].astype(int)
+        col = normalized[TARGET_COLUMN]
+        if col.dtype == object or not pd.api.types.is_integer_dtype(col):
+            normalized[TARGET_COLUMN] = col.astype(str).str.strip().map(_LABEL_MAP).astype(int)
     return normalized
 
 
