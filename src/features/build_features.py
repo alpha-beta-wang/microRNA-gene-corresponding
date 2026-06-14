@@ -1,33 +1,70 @@
-from typing import Callable
+from typing import Any, Callable
 
 import pandas as pd
 
 from src.features.basic_features import compute_sequence_features
 from src.features.sequence_match_features import compute_match_features
 
-_FEATURE_BLOCKS: dict[str, Callable[[pd.DataFrame], pd.DataFrame]] = {
-    "basic": compute_sequence_features,
-    "match": compute_match_features,
-}
+_LAZY_BLOCKS: dict[str, Callable[[], Callable[[pd.DataFrame], pd.DataFrame]]] = {}
 
 
-def register_block(name: str, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> None:
-    _FEATURE_BLOCKS[name] = fn
+def _register(name: str, factory: Callable[[], Callable[[pd.DataFrame], pd.DataFrame]]) -> None:
+    _LAZY_BLOCKS[name] = factory
 
 
-def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame, blocks: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _resolve(name: str) -> Callable[[pd.DataFrame], pd.DataFrame]:
+    if name not in _LAZY_BLOCKS:
+        raise KeyError(f"unknown feature block '{name}'; available: {list(_LAZY_BLOCKS.keys())}")
+    return _LAZY_BLOCKS[name]()
+
+
+_register("basic", lambda: compute_sequence_features)
+_register("match", lambda: compute_match_features)
+
+
+def _make_kmer():
+    from src.features.kmer_features import compute_kmer_features
+    return compute_kmer_features
+
+
+_register("kmer", _make_kmer)
+
+
+def _make_alignment():
+    from src.features.alignment_features import compute_alignment_features
+    return compute_alignment_features
+
+
+_register("alignment", _make_alignment)
+
+
+def _make_rna_energy():
+    from src.features.rna_energy_features import compute_rna_energy_features
+    return compute_rna_energy_features
+
+
+_register("rna_energy", _make_rna_energy)
+
+
+def build_features(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    blocks: list[str],
+    block_kwargs: dict[str, dict[str, Any]] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build train/test feature tables from a list of enabled block names."""
     if not blocks:
         raise ValueError("at least one feature block required")
+    if block_kwargs is None:
+        block_kwargs = {}
 
     train_parts = []
     test_parts = []
     for name in blocks:
-        fn = _FEATURE_BLOCKS.get(name)
-        if fn is None:
-            raise KeyError(f"unknown feature block '{name}'; available: {list(_FEATURE_BLOCKS.keys())}")
-        tr = fn(train_df)
-        te = fn(test_df)
+        fn = _resolve(name)
+        kwargs = block_kwargs.get(name, {})
+        tr = fn(train_df, **kwargs) if kwargs else fn(train_df)
+        te = fn(test_df, **kwargs) if kwargs else fn(test_df)
         print(f"  [{name}] train_cols={len(tr.columns)} test_cols={len(te.columns)}")
         train_parts.append(tr)
         test_parts.append(te)
