@@ -248,25 +248,85 @@ mirna_seq.csv                    ──┘
 
 用 `GroupKFold` 分别按 gene、miRNA、gene+miRNA 对分组做交叉验证。如果分组得分显著低于分层 CV，说明模型在记忆实体身份而非学习真实配对模式
 
-### `src/run_baseline.py` — baseline 一键入口
+### `src/features/kmer_features.py` — k-mer 频率特征
 
-串联全部流程：
+对 gene (ACGT) 和 miRNA (ACGU) 分别统计 k-mer 归一化频率（k=2,3），产生 160 列带 `kmer__` 前缀的特征。无外部依赖。
+
+### `src/features/alignment_features.py` — 生物信息学比对特征
+
+使用 Biopython 计算每对序列的 Smith-Waterman (local) 和 Needleman-Wunsch (global) 比对得分及归一化版本，共 7 列带 `align__` 前缀的特征。需 `pip install biopython`。
+
+### `src/features/rna_energy_features.py` — RNA 热力学 MFE 特征
+
+使用 ViennaRNA 计算 miRNA MFE、duplex 结合能、候选窗口数量等热力学特征，共 7 列带 `rna__` 前缀的特征。需 `pip install viennarna` 或安装 ViennaRNA 命令行工具，启用时后台不可用则直接报错。
+
+### `src/models/hard_negative.py` — 二阶段难负样本挖掘
+
+Stage-1 正常 CV 训练，用 OOF 概率从真实负样本中选出预测概率偏高的 "hard negatives"；Stage-2 在"全部正样本 + hard negatives"上训练，并将 Stage-1 OOF 作为 meta-feature 注入。推理时两阶段串联输出。
+
+### `src/features/build_features.py` — 特征块注册与统一拼装
+
+根据 `--feature-blocks` 参数懒加载对应的特征计算函数，拼接 train/test 特征表，去重列名并对齐测试集列到训练集。
+
+### `src/run_baseline.py` — 可配置流水线入口
+
+通过 `argparse` 提供完整的 CLI 控制，支持特征块选择、模型组合、训练策略切换。默认零参数运行等效于原 baseline：
+
+```bash
+python -m src.run_baseline
+# 等价于
+python -m src.run_baseline --feature-blocks basic,match --models lgbm,xgb --threshold-search on
+```
+
+**完整 CLI 参数**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy |
+| `--models` | `lgbm,xgb` | 模型：lgbm, xgb |
+| `--run-tag` | — | 实验标签，用于隔离输出文件 |
+| `--threshold-search` | `on` | OOF 最优阈值搜索 |
+| `--second-stage` | `none` | 二阶段策略：hard_negative |
+| `--hard-negative-threshold` | `0.8` | hard-negative 概率阈值 |
+| `--hard-negative-top-fraction` | — | 以 top fraction 选 hard negatives（覆盖阈值） |
+| `--missing-external-policy` | `error` | 外部工具缺失行为：error（报错）/ skip（跳过） |
+| `--ensemble-mode` | `mean` | 集成方式 |
+
+流水线串联：
 
 ```
-加载数据 → 构建特征 → 训练双模型 → 阈值搜索 → 生成提交
+加载数据 → 构建特征 → [二阶段训练] → 阈值搜索 → 生成提交
 ```
 
 ---
 
 ## 基线结果
 
-数据集：738 训练样本，185 测试样本，24 个特征
+数据集：738 训练样本，185 测试样本
+
+### Baseline（basic+match，23 特征）
 
 | 模型 | 5 折 CV F1 (0.5 阈值) | OOF 最优 F1 | 最优阈值 |
 |------|----------------------|-------------|----------|
 | LightGBM | 0.8271 | 0.8305 | 0.452 |
 | XGBoost | 0.8248 | 0.8316 | 0.388 |
 | Ensemble (平均) | — | 0.8299 | 0.460 |
+
+### basic+match+kmer（183 特征）
+
+| 模型 | OOF 最优 F1 | 最优阈值 |
+|------|-------------|----------|
+| LightGBM | 0.8361 | 0.484 |
+| XGBoost | 0.8346 | 0.476 |
+| Ensemble | 0.8362 | 0.484 |
+
+### 全特征（basic+match+kmer+alignment+rna_energy，197 特征）
+
+| 模型 | OOF 最优 F1 | 最优阈值 |
+|------|-------------|----------|
+| LightGBM | 0.8332 | 0.468 |
+| XGBoost | 0.8311 | 0.460 |
+| Ensemble | 0.8310 | 0.476 |
 
 ### 泄漏检查结果
 
@@ -284,8 +344,29 @@ mirna_seq.csv                    ──┘
 ## 常用命令
 
 ```bash
-# 运行基线流水线
+# 运行基线流水线（默认 23 特征）
 python -m src.run_baseline
+
+# 启用 k-mer 频率特征（183 特征）
+python -m src.run_baseline --feature-blocks basic,match,kmer
+
+# 启用比对特征（需 biopython）
+python -m src.run_baseline --feature-blocks basic,match,alignment
+
+# 启用 RNA 热力学特征（需 viennarna）
+python -m src.run_baseline --feature-blocks basic,match,rna_energy
+
+# 全部特征（197 特征）
+python -m src.run_baseline --feature-blocks basic,match,kmer,alignment,rna_energy
+
+# 单模型（仅 XGBoost）
+python -m src.run_baseline --models xgb
+
+# 二阶段 hard-negative 挖掘
+python -m src.run_baseline --feature-blocks basic,match,kmer --second-stage hard_negative
+
+# 实验运行（带 run-tag，避免覆盖 baseline 产物）
+python -m src.run_baseline --feature-blocks basic,match,kmer --run-tag kmer_exp
 
 # 仅测试数据加载
 python -m src.data
@@ -301,6 +382,8 @@ python -c "from src.data.load_data import build_dataset_bundle; b = build_datase
 
 ## 依赖
 
+### 核心依赖（必装）
+
 ```
 pandas>=2.2.0
 numpy>=1.26.0
@@ -311,5 +394,14 @@ pyarrow>=17.0.0
 joblib>=1.4.0
 ```
 
-均为开源库，通过 `pip install` 从 PyPI 下载预编译 wheel
+### 可选依赖（按需安装）
+
+| 依赖 | 用途 | 安装命令 |
+|------|------|----------|
+| `biopython>=1.80` | alignment 特征块（Smith-Waterman / Needleman-Wunsch） | `pip install biopython` |
+| `viennarna>=2.6.0` | rna_energy 特征块（MFE / duplex 热力学） | `pip install viennarna` |
+
+当 `--feature-blocks` 包含 `alignment` 或 `rna_energy` 但对应包未安装时，默认会报错并给出安装指引。可通过 `--missing-external-policy skip` 跳过缺失的 block。
+
+所有核心依赖均为开源库，通过 `pip install` 从 PyPI 下载预编译 wheel。Biopython 和 ViennaRNA 也提供 Windows/Linux/macOS 预编译 wheel。
 
