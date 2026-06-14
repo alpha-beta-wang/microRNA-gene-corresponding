@@ -51,6 +51,7 @@ def build_features(
     test_df: pd.DataFrame,
     blocks: list[str],
     block_kwargs: dict[str, dict[str, Any]] | None = None,
+    missing_external_policy: str = "error",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build train/test feature tables from a list of enabled block names."""
     if not blocks:
@@ -61,13 +62,28 @@ def build_features(
     train_parts = []
     test_parts = []
     for name in blocks:
-        fn = _resolve(name)
+        try:
+            fn = _resolve(name)
+        except (ImportError, ModuleNotFoundError) as e:
+            if missing_external_policy == "skip":
+                print(f"  [{name}] SKIPPED — {e}")
+                continue
+            raise
         kwargs = block_kwargs.get(name, {})
-        tr = fn(train_df, **kwargs) if kwargs else fn(train_df)
-        te = fn(test_df, **kwargs) if kwargs else fn(test_df)
+        try:
+            tr = fn(train_df, **kwargs) if kwargs else fn(train_df)
+            te = fn(test_df, **kwargs) if kwargs else fn(test_df)
+        except RuntimeError as e:
+            if missing_external_policy == "skip":
+                print(f"  [{name}] SKIPPED — {e}")
+                continue
+            raise
         print(f"  [{name}] train_cols={len(tr.columns)} test_cols={len(te.columns)}")
         train_parts.append(tr)
         test_parts.append(te)
+
+    if not train_parts:
+        raise RuntimeError("no feature blocks were successfully loaded")
 
     train_features = pd.concat(train_parts, axis=1)
     test_features = pd.concat(test_parts, axis=1)

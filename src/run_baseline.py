@@ -61,7 +61,10 @@ def main():
     )
 
     print(f"=== building features (blocks: {feature_blocks}) ===")
-    train_features, test_features = build_features(bundle.train, bundle.test, feature_blocks)
+    train_features, test_features = build_features(
+        bundle.train, bundle.test, feature_blocks,
+        missing_external_policy=args.missing_external_policy,
+    )
 
     labels = bundle.train[TARGET_COLUMN].copy()
     test_meta = bundle.test[[GENE_COLUMN, MIRNA_COLUMN]]
