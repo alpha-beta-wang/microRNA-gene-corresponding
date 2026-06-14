@@ -9,9 +9,16 @@ from src.config import SUBMISSION_DIR, SUBMIT_EXAMPLE_FILE, GENE_COLUMN, MIRNA_C
 
 
 def _predict_with_models(
-    features: pd.DataFrame, models: list[Union[LGBMClassifier, XGBClassifier]]
+    features: pd.DataFrame, models: list[Union[LGBMClassifier, XGBClassifier]],
+    feature_cols: list[list[str]] | None = None,
 ) -> np.ndarray:
-    probas = np.array([m.predict_proba(features)[:, 1] for m in models])
+    if feature_cols is None:
+        probas = np.array([m.predict_proba(features)[:, 1] for m in models])
+    else:
+        probas = np.array([
+            m.predict_proba(features[feature_cols[i]])[:, 1]
+            for i, m in enumerate(models)
+        ])
     return probas.mean(axis=0)
 
 
@@ -21,8 +28,9 @@ def predict_and_submit(
     models: list[Union[LGBMClassifier, XGBClassifier]],
     threshold: float,
     output_name: str = "submission.csv",
+    model_feature_cols: list[list[str]] | None = None,
 ) -> pd.DataFrame:
-    avg_proba = _predict_with_models(test_features, models)
+    avg_proba = _predict_with_models(test_features, models, model_feature_cols)
     predictions = (avg_proba >= threshold).astype(int)
 
     template = pd.read_csv(SUBMIT_EXAMPLE_FILE)

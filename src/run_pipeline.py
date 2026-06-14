@@ -2,12 +2,16 @@ import argparse
 
 import pandas as pd
 
-from src.config import TARGET_COLUMN, GENE_COLUMN, MIRNA_COLUMN
+from src.config import TARGET_COLUMN, GENE_COLUMN, MIRNA_COLUMN, SUBMISSION_DIR, SUBMIT_EXAMPLE_FILE
 from src.data.load_data import build_dataset_bundle
 from src.features.build_features import build_features
 from src.models.hard_negative import train_two_stage, predict_two_stage
-from src.models.train_ensemble import train_ensemble, optimize_thresholds, save_ensemble_artifacts
-from src.models.predict import predict_and_submit, predict_ensemble
+
+from src.models.train_ensemble import (
+    train_ensemble, build_stacking_ensemble, predict_ensemble_proba,
+    optimize_thresholds, save_ensemble_artifacts,
+)
+from src.models.predict import predict_and_submit
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--hard-negative-threshold", type=float, default=0.8,
-        help="OOF probability threshold for hard-negative selection (default: 0.8)",
+        help="OOF probability threshold for hard-negative selection",
     )
     p.add_argument(
         "--hard-negative-top-fraction", type=float, default=None,
@@ -42,15 +46,35 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--imbalance-strategy", default="none", choices=["none"],
-        help="class imbalance strategy (default: none; focal not implemented — data is 70/30)",
+        help="class imbalance strategy (default: none)",
     )
     p.add_argument(
         "--missing-external-policy", default="error", choices=["error", "skip"],
         help="behavior when an external tool is missing (default: error)",
     )
     p.add_argument(
-        "--ensemble-mode", default="mean",
+        "--ensemble-mode", default="mean", choices=["mean", "stacking"],
         help="ensemble combination mode (default: mean)",
+    )
+    p.add_argument(
+        "--feature-selection", default="none", choices=["none", "top_n"],
+        help="feature selection within CV folds (default: none)",
+    )
+    p.add_argument(
+        "--feature-top-n", type=int, default=50,
+        help="top N features to keep when --feature-selection top_n (default: 50)",
+    )
+    p.add_argument(
+        "--feature-selection-threshold", type=str, default="median",
+        help="threshold for select_from_model (default: median)",
+    )
+    p.add_argument(
+        "--hyperopt", default="none", choices=["none", "optuna"],
+        help="hyperparameter optimization mode (default: none)",
+    )
+    p.add_argument(
+        "--hyperopt-trials", type=int, default=50,
+        help="number of Optuna trials per model (default: 50)",
     )
     return p.parse_args()
 
@@ -65,8 +89,11 @@ def _print_results(results: dict, model_names: list[str]) -> None:
         if bt in results:
             print(f"{m} best_f1={results[bf]:.4f} threshold={results[bt]:.3f}")
     if "ensemble_oof_best_f1" in results:
-        print(f"ensemble best_f1={results['ensemble_oof_best_f1']:.4f} "
+        mode = results.get("ensemble_mode", "mean")
+        print(f"ensemble ({mode}) best_f1={results['ensemble_oof_best_f1']:.4f} "
               f"threshold={results['ensemble_oof_best_threshold']:.3f}")
+    if "stacker_coef" in results:
+        print(f"stacker weights: {results['stacker_coef']}")
 
 
 def _submit_standard(
@@ -76,21 +103,56 @@ def _submit_standard(
     model_names: list[str],
     tag_prefix: str,
 ) -> None:
+    lgbm_cols = results.get("lgbm_feature_cols")
+    xgb_cols = results.get("xgb_feature_cols")
+
     if "lgbm" in model_names and "lgbm_models" in results:
         lt = results.get("lgbm_oof_best_threshold", 0.5)
         predict_and_submit(test_features, test_meta, results["lgbm_models"], lt,
-                           f"{tag_prefix}submission_lgbm.csv")
+                           f"{tag_prefix}submission_lgbm.csv",
+                           model_feature_cols=lgbm_cols)
 
     if "xgb" in model_names and "xgb_models" in results:
         xt = results.get("xgb_oof_best_threshold", 0.5)
         predict_and_submit(test_features, test_meta, results["xgb_models"], xt,
-                           f"{tag_prefix}submission_xgb.csv")
+                           f"{tag_prefix}submission_xgb.csv",
+                           model_feature_cols=xgb_cols)
 
-    if "ensemble_oof" in results and "lgbm_models" in results and "xgb_models" in results:
+    if "ensemble_oof" in results and ("lgbm_models" in results or "xgb_models" in results):
         et = results.get("ensemble_oof_best_threshold", 0.5)
-        predict_ensemble(test_features, test_meta,
-                         results["lgbm_models"], results["xgb_models"], et,
-                         f"{tag_prefix}submission_ensemble.csv")
+        _submit_ensemble(test_features, test_meta, results, et, f"{tag_prefix}submission_ensemble.csv")
+
+
+def _submit_ensemble(
+    test_features: pd.DataFrame,
+    test_meta: pd.DataFrame,
+    results: dict,
+    threshold: float,
+    output_name: str,
+) -> None:
+    from src.models.predict import _predict_with_models
+
+    lgbm_proba = None
+    xgb_proba = None
+    lgbm_cols = results.get("lgbm_feature_cols")
+    xgb_cols = results.get("xgb_feature_cols")
+    if "lgbm_models" in results:
+        lgbm_proba = _predict_with_models(test_features, results["lgbm_models"], lgbm_cols)
+    if "xgb_models" in results:
+        xgb_proba = _predict_with_models(test_features, results["xgb_models"], xgb_cols)
+
+    avg_proba = predict_ensemble_proba(lgbm_proba, xgb_proba, results)
+    predictions = (avg_proba >= threshold).astype(int)
+
+    template = pd.read_csv(SUBMIT_EXAMPLE_FILE)
+    submission = test_meta[[GENE_COLUMN, MIRNA_COLUMN]].copy()
+    submission[TARGET_COLUMN] = predictions
+    submission = submission[list(template.columns)]
+
+    SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
+    submission_path = SUBMISSION_DIR / output_name
+    submission.to_csv(submission_path, index=False)
+    print(f"submission saved to {submission_path} rows={len(submission)}")
 
 
 def main():
@@ -117,15 +179,36 @@ def main():
     test_meta = bundle.test[[GENE_COLUMN, MIRNA_COLUMN]]
     tag_prefix = f"{args.run_tag}_" if args.run_tag else ""
 
+    if args.hyperopt == "optuna":
+        from src.models.hyperopt import run_optuna
+        print(f"=== hyperparameter optimization (optuna, {args.hyperopt_trials} trials) ===")
+        lgbm_params, xgb_params = run_optuna(
+            train_features, labels, model_names, args.hyperopt_trials,
+        )
+    else:
+        lgbm_params, xgb_params = None, None
+
+    train_kwargs = dict(
+        models=model_names,
+        feature_selection=args.feature_selection,
+        feature_top_n=args.feature_top_n,
+        feature_selection_threshold=args.feature_selection_threshold,
+        lgbm_params=lgbm_params,
+        xgb_params=xgb_params,
+    )
+
     if args.second_stage == "hard_negative":
         print(f"=== two-stage training (models: {model_names}) ===")
-        ts_results = train_two_stage(
-            train_features, labels, models=model_names,
-            hn_threshold=args.hard_negative_threshold,
-            hn_top_fraction=args.hard_negative_top_fraction,
-        )
+        ts_results = train_two_stage(train_features, labels, **train_kwargs,
+                                     hn_threshold=args.hard_negative_threshold,
+                                     hn_top_fraction=args.hard_negative_top_fraction)
         s1 = ts_results["stage1"]
         s2 = ts_results["stage2"]
+
+        if args.ensemble_mode == "stacking":
+            s1 = build_stacking_ensemble(s1, labels)
+            s2_labels = labels[ts_results["stage2_mask"]]
+            s2 = build_stacking_ensemble(s2, s2_labels)
 
         print("--- stage 1 results ---")
         _print_results(s1, model_names)
@@ -138,12 +221,9 @@ def main():
         print("=== generating submissions ===")
         _submit_standard(test_features, test_meta, s1, model_names, f"{tag_prefix}stage1_")
 
-        # Two-stage submission
         ts_proba = predict_two_stage(test_features, ts_results)
         et = s2.get("ensemble_oof_best_threshold", 0.5)
         ts_preds = (ts_proba >= et).astype(int)
-        import pandas as pd
-        from src.config import SUBMISSION_DIR, SUBMIT_EXAMPLE_FILE
         template = pd.read_csv(SUBMIT_EXAMPLE_FILE)
         sub = test_meta[[GENE_COLUMN, MIRNA_COLUMN]].copy()
         sub[TARGET_COLUMN] = ts_preds
@@ -153,8 +233,13 @@ def main():
         sub.to_csv(out, index=False)
         print(f"submission saved to {out} rows={len(sub)}")
     else:
-        print(f"=== training (models: {model_names}) ===")
-        results = train_ensemble(train_features, labels, models=model_names)
+        print(f"=== training (models: {model_names}, "
+              f"feature_selection={args.feature_selection}, "
+              f"ensemble={args.ensemble_mode}) ===")
+        results = train_ensemble(train_features, labels, **train_kwargs)
+
+        if args.ensemble_mode == "stacking":
+            results = build_stacking_ensemble(results, labels)
 
         if args.threshold_search == "on":
             results = optimize_thresholds(results, labels)

@@ -98,15 +98,20 @@ def predict_two_stage(
 
     # Stage 1: get model lists
     s1_models = []
+    s1_feature_cols = []
     for m in ["lgbm", "xgb"]:
         key = f"{m}_models"
+        cols_key = f"{m}_feature_cols"
         if key in s1:
             s1_models.extend(s1[key])
+            if cols_key in s1:
+                s1_feature_cols.extend(s1[cols_key])
 
     if not s1_models:
         raise RuntimeError("no stage-1 models found")
 
-    s1_proba = _predict_with_models(test_features, s1_models)
+    s1_cols = s1_feature_cols if s1_feature_cols else None
+    s1_proba = _predict_with_models(test_features, s1_models, s1_cols)
 
     # Stage 2: add meta-feature
     s2_features = test_features.copy()
@@ -114,12 +119,20 @@ def predict_two_stage(
 
     # Align columns to what stage-2 was trained on
     s2_models = []
+    s2_feature_cols = []
     for m in ["lgbm", "xgb"]:
         key = f"{m}_models"
+        cols_key = f"{m}_feature_cols"
         if key in s2:
             s2_models.extend(s2[key])
+            if cols_key in s2:
+                s2_feature_cols.extend(s2[cols_key])
 
     if not s2_models:
         raise RuntimeError("no stage-2 models found")
 
-    return _predict_with_models(s2_features, s2_models)
+    # Align feature columns to what s2 models expect (add meta column)
+    if s2_feature_cols:
+        s2_feature_cols = [cols + [meta_col] for cols in s2_feature_cols]
+
+    return _predict_with_models(s2_features, s2_models, s2_feature_cols if s2_feature_cols else None)
