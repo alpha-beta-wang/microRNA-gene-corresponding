@@ -69,7 +69,7 @@ pip install -r requirements.txt
 ### 4. 运行基线流水线
 
 ```bash
-python -m src.run_baseline
+python -m src.run_pipeline
 ```
 
 一键完成：数据加载 → 特征构建 → 双模型训练 → 阈值优化 → 提交生成。
@@ -114,7 +114,7 @@ outputs/
 │       └── mirna_seq.csv
 ├── src/                           # 源代码
 │   ├── config.py                  # 路径、列名、随机种子等全局常量
-│   ├── run_baseline.py            # 一键入口：数据→特征→训练→提交
+│   ├── run_pipeline.py            # 一键入口：数据→特征→训练→提交
 │   ├── data/
 │   │   ├── load_data.py           # 数据读取、清洗、merge
 │   │   └── __main__.py            # 数据加载自检入口
@@ -268,14 +268,14 @@ Stage-1 正常 CV 训练，用 OOF 概率从真实负样本中选出预测概率
 
 根据 `--feature-blocks` 参数懒加载对应的特征计算函数，拼接 train/test 特征表，去重列名并对齐测试集列到训练集。
 
-### `src/run_baseline.py` — 可配置流水线入口
+### `src/run_pipeline.py` — 可配置流水线入口
 
 通过 `argparse` 提供完整的 CLI 控制，支持特征块选择、模型组合、训练策略切换。默认零参数运行等效于原 baseline：
 
 ```bash
-python -m src.run_baseline
+python -m src.run_pipeline
 # 等价于
-python -m src.run_baseline --feature-blocks basic,match --models lgbm,xgb --threshold-search on
+python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --threshold-search on
 ```
 
 **完整 CLI 参数**：
@@ -345,28 +345,28 @@ python -m src.run_baseline --feature-blocks basic,match --models lgbm,xgb --thre
 
 ```bash
 # 运行基线流水线（默认 23 特征）
-python -m src.run_baseline
+python -m src.run_pipeline
 
 # 启用 k-mer 频率特征（183 特征）
-python -m src.run_baseline --feature-blocks basic,match,kmer
+python -m src.run_pipeline --feature-blocks basic,match,kmer
 
 # 启用比对特征（需 biopython）
-python -m src.run_baseline --feature-blocks basic,match,alignment
+python -m src.run_pipeline --feature-blocks basic,match,alignment
 
 # 启用 RNA 热力学特征（需 viennarna）
-python -m src.run_baseline --feature-blocks basic,match,rna_energy
+python -m src.run_pipeline --feature-blocks basic,match,rna_energy
 
 # 全部特征（197 特征）
-python -m src.run_baseline --feature-blocks basic,match,kmer,alignment,rna_energy
+python -m src.run_pipeline --feature-blocks basic,match,kmer,alignment,rna_energy
 
 # 单模型（仅 XGBoost）
-python -m src.run_baseline --models xgb
+python -m src.run_pipeline --models xgb
 
 # 二阶段 hard-negative 挖掘
-python -m src.run_baseline --feature-blocks basic,match,kmer --second-stage hard_negative
+python -m src.run_pipeline --feature-blocks basic,match,kmer --second-stage hard_negative
 
 # 实验运行（带 run-tag，避免覆盖 baseline 产物）
-python -m src.run_baseline --feature-blocks basic,match,kmer --run-tag kmer_exp
+python -m src.run_pipeline --feature-blocks basic,match,kmer --run-tag kmer_exp
 
 # 仅测试数据加载
 python -m src.data
