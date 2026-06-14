@@ -5,3 +5,4 @@ lightgbm>=4.5.0
 pyarrow>=17.0.0
 joblib>=1.4.0
 xgboost>=2.1.0
+biopython>=1.80
