@@ -264,9 +264,23 @@ mirna_seq.csv                    ──┘
 
 Stage-1 正常 CV 训练，用 OOF 概率从真实负样本中选出预测概率偏高的 "hard negatives"；Stage-2 在"全部正样本 + hard negatives"上训练，并将 Stage-1 OOF 作为 meta-feature 注入。推理时两阶段串联输出。
 
+### `src/features/position_features.py` — 3' 端位置加权特征
+
+基于 miRNA 倾向于结合在 mRNA 3'UTR 的生物学先验，对 seed 匹配加入位置偏置，共 8 列带 `position__` 前缀的特征。计算 seed 匹配位置（3' 端归一化距离）、加权匹配计数、3' 区域标志。无外部依赖。
+
 ### `src/features/build_features.py` — 特征块注册与统一拼装
 
-根据 `--feature-blocks` 参数懒加载对应的特征计算函数，拼接 train/test 特征表，去重列名并对齐测试集列到训练集。
+根据 `--feature-blocks` 参数懒加载对应的特征计算函数，拼接 train/test 特征表，去重列名并对齐测试集列到训练集。支持通过 `block_kwargs` 传递参数给特征函数。
+
+### `src/models/hyperopt.py` — Optuna 超参数搜索
+
+使用 Optuna TPE Sampler 对 LGBM 和 XGBoost 进行贝叶斯超参数优化。在 20% holdout 上评估，搜索空间覆盖树结构（深度、叶子数）、正则化（L1/L2）、采样率（行/列）和训练步数。需 `pip install optuna`。
+
+### `src/models/train_ensemble.py` — 增强训练能力
+
+在原有 LGBM+XGBoost 双模型训练基础上新增：
+- **特征选择**：CV 折内训练 light LGBM 选择器，按重要性筛选 top_n 特征，避免泄漏
+- **Stacking 集成**：Logistic Regression 作为元学习器，组合 LGBM/XGBoost 的 OOF 概率
 
 ### `src/run_pipeline.py` — 可配置流水线入口
 
@@ -282,7 +296,7 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy |
+| `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy, position, rna_accessibility |
 | `--models` | `lgbm,xgb` | 模型：lgbm, xgb |
 | `--run-tag` | — | 实验标签，用于隔离输出文件 |
 | `--threshold-search` | `on` | OOF 最优阈值搜索 |
@@ -290,7 +304,12 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 | `--hard-negative-threshold` | `0.8` | hard-negative 概率阈值 |
 | `--hard-negative-top-fraction` | — | 以 top fraction 选 hard negatives（覆盖阈值） |
 | `--missing-external-policy` | `error` | 外部工具缺失行为：error（报错）/ skip（跳过） |
-| `--ensemble-mode` | `mean` | 集成方式 |
+| `--ensemble-mode` | `mean` | 集成方式：mean（概率平均）/ stacking（LR 元学习器） |
+| `--feature-selection` | `none` | CV 折内特征选择：none / top_n |
+| `--feature-top-n` | `50` | 特征选择保留的特征数 |
+| `--feature-selection-threshold` | `median` | select_from_model 的阈值（备选策略） |
+| `--hyperopt` | `none` | 超参数搜索：none / optuna |
+| `--hyperopt-trials` | `50` | Optuna 每模型搜索 trial 数 |
 
 流水线串联：
 
@@ -365,6 +384,21 @@ python -m src.run_pipeline --models xgb
 # 二阶段 hard-negative 挖掘
 python -m src.run_pipeline --feature-blocks basic,match,kmer --second-stage hard_negative
 
+# 特征选择 + Stacking 集成
+python -m src.run_pipeline --feature-blocks basic,match,kmer --feature-selection top_n --feature-top-n 80 --ensemble-mode stacking
+
+# Optuna 超参数搜索
+python -m src.run_pipeline --feature-blocks basic,match,kmer --hyperopt optuna --hyperopt-trials 100
+
+# 启用 3' 端位置加权特征（31 特征）
+python -m src.run_pipeline --feature-blocks basic,match,position
+
+# 启用靶点可及性特征（34 特征，需 viennarna）
+python -m src.run_pipeline --feature-blocks basic,match,rna_accessibility
+
+# 全部特征（202 特征）
+python -m src.run_pipeline --feature-blocks basic,match,position,kmer,rna_accessibility
+
 # 实验运行（带 run-tag，避免覆盖 baseline 产物）
 python -m src.run_pipeline --feature-blocks basic,match,kmer --run-tag kmer_exp
 
@@ -399,9 +433,10 @@ joblib>=1.4.0
 | 依赖 | 用途 | 安装命令 |
 |------|------|----------|
 | `biopython>=1.80` | alignment 特征块（Smith-Waterman / Needleman-Wunsch） | `pip install biopython` |
-| `viennarna>=2.6.0` | rna_energy 特征块（MFE / duplex 热力学） | `pip install viennarna` |
+| `viennarna>=2.6.0` | rna_energy / rna_accessibility 特征块（MFE / duplex / accessibility） | `pip install viennarna` |
+| `optuna>=4.0.0` | hyperopt optuna（贝叶斯超参数搜索） | `pip install optuna` |
 
-当 `--feature-blocks` 包含 `alignment` 或 `rna_energy` 但对应包未安装时，默认会报错并给出安装指引。可通过 `--missing-external-policy skip` 跳过缺失的 block。
+当 `--feature-blocks` 包含 `alignment`、`rna_energy` 或 `rna_accessibility` 但对应包未安装时，默认会报错并给出安装指引。可通过 `--missing-external-policy skip` 跳过缺失的 block。
 
 所有核心依赖均为开源库，通过 `pip install` 从 PyPI 下载预编译 wheel。Biopython 和 ViennaRNA 也提供 Windows/Linux/macOS 预编译 wheel。
 
