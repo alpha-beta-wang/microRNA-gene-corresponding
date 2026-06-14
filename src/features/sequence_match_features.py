@@ -64,9 +64,10 @@ def compute_match_features(df: pd.DataFrame) -> pd.DataFrame:
         for m, g in zip(mirna_seq, gene_seq)
     ]
 
-    features["gene_N_ratio"] = [
-        g.count("N") / len(g) if len(g) > 0 else 0.0 for g in gene_seq
-    ]
+    # gene_N_ratio — 注释掉，原始数据中基因序列不含未知碱基 N，该特征恒为 0
+    # features["gene_N_ratio"] = [
+    #     g.count("N") / len(g) if len(g) > 0 else 0.0 for g in gene_seq
+    # ]
 
     features["seed_gc"] = [
         (m[1:8].count("G") + m[1:8].count("C")) / 7 if len(m) >= 8 else 0.0

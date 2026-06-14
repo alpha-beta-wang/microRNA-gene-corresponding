@@ -199,9 +199,10 @@ mirna_seq.csv                    ──┘
 | seed_occurrence_count | seed 区在 gene 中出现的次数 |
 | seed_max_consecutive | seed 区与 gene 窗口的最长连续匹配碱基数 |
 | mirna_max_consecutive | 完整 miRNA 与 gene 窗口的最长连续匹配 |
-| gene_N_ratio | gene 序列中未知碱基 (N) 的比例 |
 | seed_gc | seed 区 GC 含量 |
 | seed_A_count / seed_U_count | seed 区 A/U 计数 |
+
+> `gene_N_ratio` ~~gene 序列中未知碱基 (N) 的比例~~ — **已注释掉**。原始数据经赛题官方清洗后不含未知碱基 N，该特征恒为 0，无预测价值。详见提交记录。
 
 **原理**：miRNA 通过 seed 区与靶 mRNA 的 3'UTR 互补配对实现调控。seed 区的出现方式、连续匹配程度和互补方向是决定是否存在功能性 MTI 的关键信号。
 
