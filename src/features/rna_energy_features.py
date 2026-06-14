@@ -64,7 +64,10 @@ def _seed_match_windows(
 
 
 def compute_rna_energy_features(
-    df: pd.DataFrame, window_size: int = 80, max_windows: int = 5
+    df: pd.DataFrame,
+    window_size: int = 80,
+    max_windows: int = 5,
+    compute_accessibility: bool = False,
 ) -> pd.DataFrame:
     _detect_rna_backend()
 
@@ -77,6 +80,9 @@ def compute_rna_energy_features(
     best_duplex_energies_norm = []
     candidate_counts = []
     duplex_per_window = []
+    target_window_avg_mfes = []
+    target_window_min_mfes = []
+    target_window_max_mfes = []
 
     for m, g in zip(mirna_seq, gene_seq):
         mfe = _mirna_mfe(m)
@@ -89,9 +95,18 @@ def compute_rna_energy_features(
             d_energies = [_duplex_energy(m, w) for w in windows]
             best_de = min(d_energies)  # more negative = stronger binding
             avg_de = sum(d_energies) / len(d_energies)
+            if compute_accessibility:
+                w_mfes = [_mirna_mfe(w) for w in windows]
+                target_window_avg_mfes.append(sum(w_mfes) / len(w_mfes))
+                target_window_min_mfes.append(min(w_mfes))
+                target_window_max_mfes.append(max(w_mfes))
         else:
             best_de = 0.0
             avg_de = 0.0
+            if compute_accessibility:
+                target_window_avg_mfes.append(0.0)
+                target_window_min_mfes.append(0.0)
+                target_window_max_mfes.append(0.0)
 
         best_duplex_energies.append(best_de)
         best_duplex_energies_norm.append(best_de / len(m) if len(m) > 0 else 0.0)
@@ -110,5 +125,14 @@ def compute_rna_energy_features(
     ]
     features["rna__candidate_count"] = candidate_counts
     features["rna__duplex_per_window"] = duplex_per_window
+
+    if compute_accessibility:
+        features["rna__target_window_avg_mfe"] = target_window_avg_mfes
+        features["rna__target_window_min_mfe"] = target_window_min_mfes
+        features["rna__target_window_max_mfe"] = target_window_max_mfes
+        features["rna__accessibility_energy"] = [
+            d - w if d < 0 and w < 0 else 0.0
+            for d, w in zip(best_duplex_energies, target_window_min_mfes)
+        ]
 
     return features

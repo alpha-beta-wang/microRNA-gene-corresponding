@@ -46,6 +46,23 @@ def _make_rna_energy():
 _register("rna_energy", _make_rna_energy)
 
 
+def _make_position():
+    from src.features.position_features import compute_position_features
+    return compute_position_features
+
+
+_register("position", _make_position)
+
+
+def _make_rna_accessibility():
+    from functools import partial
+    from src.features.rna_energy_features import compute_rna_energy_features
+    return partial(compute_rna_energy_features, compute_accessibility=True)
+
+
+_register("rna_accessibility", _make_rna_accessibility)
+
+
 def build_features(
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
