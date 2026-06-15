@@ -76,6 +76,10 @@ def parse_args() -> argparse.Namespace:
         "--hyperopt-trials", type=int, default=50,
         help="number of Optuna trials per model (default: 50)",
     )
+    p.add_argument(
+        "--scale-pos-weight", type=int, default=None,
+        help="set scale_pos_weight for tree models (lgbm, xgb) to handle class imbalance",
+    )
     return p.parse_args()
 
 
@@ -183,6 +187,10 @@ def main():
         )
     else:
         model_params = {}
+        if args.scale_pos_weight is not None:
+            for m in model_names:
+                if m in ("lgbm", "xgb"):
+                    model_params.setdefault(m, {})["scale_pos_weight"] = args.scale_pos_weight
 
     train_kwargs = dict(
         models=model_names,
