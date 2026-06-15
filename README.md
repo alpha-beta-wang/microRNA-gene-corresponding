@@ -328,6 +328,7 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 | `--feature-selection-threshold` | `median` | select_from_model 的阈值（备选策略） |
 | `--hyperopt` | `none` | 超参数搜索：none / optuna |
 | `--hyperopt-trials` | `50` | Optuna 每模型搜索 trial 数 |
+| `--scale-pos-weight` | — | 树模型正样本损失权重，缓解类别不平衡（如 55 等价于 pos55） |
 
 流水线串联：
 
