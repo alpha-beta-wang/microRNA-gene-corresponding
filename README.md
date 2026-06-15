@@ -92,6 +92,10 @@ outputs/
 ├── models/            # 训练好的模型文件
 │   ├── lgbm_fold*.pkl
 │   ├── xgb_fold*.pkl
+│   ├── svm_fold*.pkl
+│   ├── rf_fold*.pkl
+│   ├── extratrees_fold*.pkl
+│   ├── fm_fold*.pkl
 │   └── ensemble_info.txt
 └── submissions/       # 提交文件
     ├── submission_lgbm.csv
@@ -210,23 +214,30 @@ mirna_seq.csv                    ──┘
 
 ### `src/models/train_ensemble.py` — 模型训练
 
+通过 `MODEL_REGISTRY` 注册表统一管理，CLI 任意组合切换。
+
 **模型选择**：
 
-| 模型 | 类型 | 来源 |
-|------|------|------|
-| LightGBM 4.6.0 | 梯度提升决策树 (GBDT) | 微软开源，PyPI 预编译 wheel |
-| XGBoost 3.2.0 | 梯度提升决策树 (GBDT) | 开源，PyPI 预编译 wheel |
+| 模型 | key | 类型 | 需 scaling | 需 eval_set |
+|------|-----|------|:----------:|:-----------:|
+| LightGBM 4.6.0 | `lgbm` | 梯度提升决策树 (GBDT) | ✗ | ✓ |
+| XGBoost 3.2.0 | `xgb` | 梯度提升决策树 (GBDT) | ✗ | ✓ |
+| SVM-RBF | `svm` | 支持向量机 (RBF 核) | ✓ | ✗ |
+| Random Forest | `rf` | 随机森林 | ✗ | ✗ |
+| Extra-Trees | `extratrees` | 极端随机树 | ✗ | ✗ |
+| Factorization Machine | `fm` | 因子分解机 (自实现 numpy+SGD) | ✓ | ✗ |
 
-两个模型是本地安装的开源库，训练和推理均在本机 CPU 完成
+> 需 scaling 的模型 (SVM, FM) 会自动在每折内做 `StandardScaler` 处理，`ScaledModel` 包装后保存。
 
 **训练流程**：
 
 1. **5 折分层交叉验证** (`StratifiedKFold`)：保证每折正负样本比例一致
-2. 每折分别训练 LGBM 和 XGBoost
+2. 每折遍历 `--models` 指定的模型列表，从注册表获取工厂函数创建模型
 3. 验证集概率存入 OOF (Out-of-Fold) 数组
 4. 在 OOF 上搜索最优阈值（0.1 ~ 0.9，101 步），最大化 F1
+5. 支持 stacking 集成：Logistic Regression 元学习器组合多模型 OOF 概率
 
-**超参选择**（小数据集防过拟合）：
+**超参选择（树模型默认，小数据集防过拟合）**：
 - `learning_rate=0.01`：小学习率提高泛化能力
 - `max_depth=6`：限制树深度
 - `subsample=0.8, colsample_bytree=0.8`：行/列采样增加模型多样性
@@ -240,9 +251,7 @@ mirna_seq.csv                    ──┘
 3. 用最优阈值二值化 → 0/1 标签
 4. 按 `submit_example.csv` 格式写出提交文件
 
-支持三种提交模式：
-- 单模型提交（LGBM / XGBoost）
-- 集成提交（LGBM + XGBoost 概率平均）
+支持任意模型的单模型提交和 ensemble 提交（stacking / mean 平均），通过 CLI 的 `--models` 参数动态切换。
 
 ### `src/models/validate_groups.py` — 泄漏检查
 
@@ -274,13 +283,22 @@ Stage-1 正常 CV 训练，用 OOF 概率从真实负样本中选出预测概率
 
 ### `src/models/hyperopt.py` — Optuna 超参数搜索
 
-使用 Optuna TPE Sampler 对 LGBM 和 XGBoost 进行贝叶斯超参数优化。在 20% holdout 上评估，搜索空间覆盖树结构（深度、叶子数）、正则化（L1/L2）、采样率（行/列）和训练步数。需 `pip install optuna`。
+通过 `OBJECTIVE_REGISTRY` 按模型名查找 objective 函数，支持任意注册模型的超参搜索。
+在 20% holdout 上评估，搜索空间覆盖树结构（深度、叶子数）、正则化（L1/L2）、采样率（行/列）和训练步数。需 `pip install optuna`。
 
-### `src/models/train_ensemble.py` — 增强训练能力
+### `src/models/train_ensemble.py` — MODEL_REGISTRY 模型注册与训练
 
-在原有 LGBM+XGBoost 双模型训练基础上新增：
+通过 `MODEL_REGISTRY` 注册表统一管理所有模型（LGBM、XGBoost、SVM、RF、Extra-Trees、FM），支持：
 - **特征选择**：CV 折内训练 light LGBM 选择器，按重要性筛选 top_n 特征，避免泄漏
-- **Stacking 集成**：Logistic Regression 作为元学习器，组合 LGBM/XGBoost 的 OOF 概率
+- **Stacking 集成**：Logistic Regression 作为元学习器，组合多模型 OOF 概率
+- **阈值搜索**：OOF 上搜索最优阈值（0.1 ~ 0.9，101 步），最大化 F1
+
+### `src/models/factorization_machine.py` — 因子分解机
+
+numpy + SGD 自实现的 FM 二分类器，使用 O(kn) 交互项分解技巧。
+- 超参：n_factors=8, learning_rate=0.001, epochs=500
+- 全局梯度裁剪防发散，float64 防溢出
+- 需 `--models fm` 启用，自动应用 StandardScaler
 
 ### `src/run_pipeline.py` — 可配置流水线入口
 
@@ -297,7 +315,7 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy, position, rna_accessibility |
-| `--models` | `lgbm,xgb` | 模型：lgbm, xgb |
+| `--models` | `lgbm,xgb` | 模型：lgbm, xgb, svm, rf, extratrees, fm（任意组合逗号分隔） |
 | `--run-tag` | — | 实验标签，用于隔离输出文件 |
 | `--threshold-search` | `on` | OOF 最优阈值搜索 |
 | `--second-stage` | `none` | 二阶段策略：hard_negative |
@@ -319,33 +337,56 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 
 ---
 
-## 基线结果
+## 实验结果
 
 数据集：738 训练样本，185 测试样本
 
-### Baseline（basic+match，23 特征）
+### basic+match（23 特征）
 
 | 模型 | 5 折 CV F1 (0.5 阈值) | OOF 最优 F1 | 最优阈值 |
-|------|----------------------|-------------|----------|
+|------|----------------------|:-----------:|:--------:|
 | LightGBM | 0.8271 | 0.8305 | 0.452 |
 | XGBoost | 0.8248 | 0.8316 | 0.388 |
-| Ensemble (平均) | — | 0.8299 | 0.460 |
+| SVM (RBF) | — | 0.8255 | 0.540 |
+| Random Forest | — | 0.8318 | 0.436 |
+| **Extra-Trees** | — | **0.8364** | 0.516 |
+| FM | — | 0.8158 | 0.100 |
+| Ensemble (概率平均) | — | 0.8299 | 0.460 |
 
 ### basic+match+kmer（183 特征）
 
 | 模型 | OOF 最优 F1 | 最优阈值 |
-|------|-------------|----------|
+|------|:-----------:|:--------:|
 | LightGBM | 0.8361 | 0.484 |
 | XGBoost | 0.8346 | 0.476 |
 | Ensemble | 0.8362 | 0.484 |
 
+### basic+match+kmer+rna_energy（190 特征）
+
+| 模型 | OOF 最优 F1 | 最优阈值 |
+|------|:-----------:|:--------:|
+| LightGBM | 0.8311 | 0.484 |
+| XGBoost | 0.8310 | 0.500 |
+| SVM (RBF) | 0.8337 | 0.436 |
+| Random Forest | 0.8328 | 0.532 |
+| Extra-Trees | 0.8305 | 0.492 |
+| FM | 0.7521 | 0.100 |
+
 ### 全特征（basic+match+kmer+alignment+rna_energy，197 特征）
 
 | 模型 | OOF 最优 F1 | 最优阈值 |
-|------|-------------|----------|
+|------|:-----------:|:--------:|
 | LightGBM | 0.8332 | 0.468 |
 | XGBoost | 0.8311 | 0.460 |
 | Ensemble | 0.8310 | 0.476 |
+
+### Stacking 集成结果
+
+| 特征 | 模型组合 | OOF 最优 F1 |
+|------|---------|:-----------:|
+| basic+match+kmer+rna_energy | lgbm,xgb,svm,rf,extratrees,fm | **0.8371** |
+| basic+match+kmer+rna_energy | lgbm,xgb,svm,rf,extratrees | 0.8361 |
+| 全部特征 (202维) | lgbm,xgb,svm,rf,extratrees,fm | 0.8351 |
 
 ### 泄漏检查结果
 
@@ -401,6 +442,18 @@ python -m src.run_pipeline --feature-blocks basic,match,position,kmer,rna_access
 
 # 实验运行（带 run-tag，避免覆盖 baseline 产物）
 python -m src.run_pipeline --feature-blocks basic,match,kmer --run-tag kmer_exp
+
+# 单模型 SVM
+python -m src.run_pipeline --models svm
+
+# 单模型 Extra-Trees（6 个模型中单模型最优）
+python -m src.run_pipeline --models extratrees
+
+# 多模型 stacking 集成（最佳策略）
+python -m src.run_pipeline --models lgbm,xgb,svm,rf,extratrees,fm --feature-blocks basic,match,kmer,rna_energy --ensemble-mode stacking
+
+# 5 模型 stacking（不含 FM）
+python -m src.run_pipeline --models lgbm,xgb,svm,rf,extratrees --feature-blocks basic,match,kmer,rna_energy --ensemble-mode stacking
 
 # 仅测试数据加载
 python -m src.data
