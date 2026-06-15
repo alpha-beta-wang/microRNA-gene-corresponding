@@ -49,17 +49,23 @@ def _xgb_objective(trial, X_tr, X_val, y_tr, y_val, seed):
     return f1_score(y_val, proba > 0.5)
 
 
+OBJECTIVE_REGISTRY: dict[str, callable] = {
+    "lgbm": _lgbm_objective,
+    "xgb": _xgb_objective,
+}
+
+
 def run_optuna(
     features: pd.DataFrame,
     labels: pd.Series,
     models: list[str],
     n_trials: int = 50,
     seed: int = SEED,
-) -> tuple[dict | None, dict | None]:
-    """Run Optuna hyperparameter search for LGBM and/or XGBoost.
+) -> dict[str, dict]:
+    """Run Optuna hyperparameter search for requested models.
 
     Uses a 20% holdout from the full dataset for validation.
-    Returns (lgbm_best_params, xgb_best_params) dicts with best params or None.
+    Returns dict mapping model name -> best params dict.
     """
     import optuna  # lazy import — optuna is an optional dependency
 
@@ -67,29 +73,22 @@ def run_optuna(
         features, labels, test_size=0.2, stratify=labels, random_state=seed + 777,
     )
 
-    lgbm_best = None
-    xgb_best = None
+    result: dict[str, dict] = {}
 
-    if "lgbm" in models:
+    for m in models:
+        objective_fn = OBJECTIVE_REGISTRY.get(m)
+        if objective_fn is None:
+            print(f"  [optuna] skipping {m}: no objective registered")
+            continue
+
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
         study.optimize(
-            lambda trial: _lgbm_objective(trial, X_tr, X_val, y_tr, y_val, seed),
+            lambda trial, fn=objective_fn: fn(trial, X_tr, X_val, y_tr, y_val, seed),
             n_trials=n_trials,
             show_progress_bar=True,
         )
-        lgbm_best = study.best_params
-        print(f"  [optuna] lgbm best_f1={study.best_value:.4f}")
-        print(f"  [optuna] lgbm best_params={lgbm_best}")
+        result[m] = study.best_params
+        print(f"  [optuna] {m} best_f1={study.best_value:.4f}")
+        print(f"  [optuna] {m} best_params={result[m]}")
 
-    if "xgb" in models:
-        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed + 1))
-        study.optimize(
-            lambda trial: _xgb_objective(trial, X_tr, X_val, y_tr, y_val, seed),
-            n_trials=n_trials,
-            show_progress_bar=True,
-        )
-        xgb_best = study.best_params
-        print(f"  [optuna] xgb best_f1={study.best_value:.4f}")
-        print(f"  [optuna] xgb best_params={xgb_best}")
-
-    return lgbm_best, xgb_best
+    return result

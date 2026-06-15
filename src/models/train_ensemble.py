@@ -4,11 +4,26 @@ from lightgbm import LGBMClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 from xgboost import XGBClassifier
 
 from src.config import MODEL_DIR, OOF_DIR, SEED, N_SPLITS
 
 import joblib
+
+
+class ScaledModel:
+    """Wrapper that applies StandardScaler before model predict_proba/predict."""
+    def __init__(self, scaler: StandardScaler, model):
+        self.scaler = scaler
+        self.model = model
+
+    def predict_proba(self, X):
+        return self.model.predict_proba(self.scaler.transform(X))
+
+    def predict(self, X):
+        return self.model.predict(self.scaler.transform(X))
 
 
 def _selector_lgbm(seed: int) -> LGBMClassifier:
@@ -35,6 +50,7 @@ def _base_lgbm(seed: int, params: dict | None = None) -> LGBMClassifier:
         reg_alpha=0.1,
         reg_lambda=0.1,
         random_state=seed,
+        metric="binary_logloss",
         early_stopping_round=100,
         verbose=-1,
     )
@@ -60,6 +76,27 @@ def _base_xgb(seed: int, params: dict | None = None) -> XGBClassifier:
     if params:
         defaults.update(params)
     return XGBClassifier(**defaults)
+
+
+def _base_svm(seed: int, params: dict | None = None) -> SVC:
+    defaults = dict(
+        probability=True,
+        kernel="rbf",
+        C=1.0,
+        gamma="scale",
+        random_state=seed,
+    )
+    if params:
+        defaults.update(params)
+    return SVC(**defaults)
+
+
+# --- model registry ---
+MODEL_REGISTRY: dict[str, dict] = {
+    "lgbm": {"factory": _base_lgbm, "needs_eval_set": True, "needs_scaling": False},
+    "xgb": {"factory": _base_xgb, "needs_eval_set": True, "needs_scaling": False},
+    "svm": {"factory": _base_svm, "needs_eval_set": False, "needs_scaling": True},
+}
 
 
 def _select_features(
@@ -106,8 +143,7 @@ def train_ensemble(
     feature_selection: str = "none",
     feature_top_n: int = 50,
     feature_selection_threshold: str = "median",
-    lgbm_params: dict | None = None,
-    xgb_params: dict | None = None,
+    model_params: dict[str, dict] | None = None,
 ) -> dict:
     if models is None:
         models = ["lgbm", "xgb"]
@@ -115,17 +151,21 @@ def train_ensemble(
     results = {}
     results["selected_features_per_fold"] = []
 
-    use_lgbm = "lgbm" in models
-    use_xgb = "xgb" in models
+    if model_params is None:
+        model_params = {}
 
-    if use_lgbm:
-        results["lgbm_oof"] = pd.Series(np.full(len(labels), 0.5), index=labels.index, name="lgbm_oof")
-        results["lgbm_models"] = []
-        results["lgbm_fold_scores"] = []
-    if use_xgb:
-        results["xgb_oof"] = pd.Series(np.full(len(labels), 0.5), index=labels.index, name="xgb_oof")
-        results["xgb_models"] = []
-        results["xgb_fold_scores"] = []
+    # Validate all model names are in registry
+    for m in models:
+        if m not in MODEL_REGISTRY:
+            raise ValueError(f"unknown model '{m}'; available: {list(MODEL_REGISTRY)}")
+
+    # Pre-allocate OOF / models / scores for each model
+    for m in models:
+        results[f"{m}_oof"] = pd.Series(
+            np.full(len(labels), 0.5), index=labels.index, name=f"{m}_oof",
+        )
+        results[f"{m}_models"] = []
+        results[f"{m}_fold_scores"] = []
 
     for fold_idx, (train_idx, val_idx) in enumerate(folds.split(features, labels)):
         X_tr, X_val = features.iloc[train_idx], features.iloc[val_idx]
@@ -143,28 +183,35 @@ def train_ensemble(
             results["selected_features_per_fold"].append(selected_cols)
             print(f"  [fold {fold_idx}] feature_selection: {len(selected_cols)}/{len(features.columns)} cols")
 
-        if use_lgbm:
-            lgbm = _base_lgbm(seed + fold_idx, lgbm_params)
-            lgbm.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], eval_metric="logloss")
-            lgbm_proba = lgbm.predict_proba(X_val)[:, 1]
-            results["lgbm_oof"].iloc[val_idx] = lgbm_proba
-            results["lgbm_fold_scores"].append(f1_score(y_val, lgbm_proba > 0.5))
-            results["lgbm_models"].append(lgbm)
-            results.setdefault("lgbm_feature_cols", []).append(list(X_tr.columns))
+        for m in models:
+            cfg = MODEL_REGISTRY[m]
+            model = cfg["factory"](seed + fold_idx, model_params.get(m))
 
-        if use_xgb:
-            xgb = _base_xgb(seed + fold_idx, xgb_params)
-            xgb.fit(X_tr, y_tr, eval_set=[(X_val, y_val)])
-            xgb_proba = xgb.predict_proba(X_val)[:, 1]
-            results["xgb_oof"].iloc[val_idx] = xgb_proba
-            results["xgb_fold_scores"].append(f1_score(y_val, xgb_proba > 0.5))
-            results["xgb_models"].append(xgb)
-            results.setdefault("xgb_feature_cols", []).append(list(X_tr.columns))
+            if cfg["needs_scaling"]:
+                scaler = StandardScaler()
+                X_tr_m = scaler.fit_transform(X_tr)
+                X_val_m = scaler.transform(X_val)
+                model_for_store = ScaledModel(scaler, model)
+            else:
+                X_tr_m, X_val_m = X_tr, X_val
+                model_for_store = model
 
-    if use_lgbm and use_xgb:
-        ensemble_proba = (results["lgbm_oof"] + results["xgb_oof"]) / 2
-        results["ensemble_oof"] = ensemble_proba
-        results["ensemble_f1_05"] = f1_score(labels, ensemble_proba > 0.5)
+            if cfg["needs_eval_set"]:
+                model.fit(X_tr_m, y_tr, eval_set=[(X_val_m, y_val)])
+            else:
+                model.fit(X_tr_m, y_tr)
+
+            proba = model.predict_proba(X_val_m)[:, 1]
+            results[f"{m}_oof"].iloc[val_idx] = proba
+            results[f"{m}_fold_scores"].append(f1_score(y_val, proba > 0.5))
+            results[f"{m}_models"].append(model_for_store)
+            results.setdefault(f"{m}_feature_cols", []).append(list(X_tr.columns))
+
+    # Compute ensemble OOF (mean of all trained model OOFs) if at least 2 models
+    trained_oofs = [results[f"{m}_oof"] for m in models if f"{m}_oof" in results]
+    if len(trained_oofs) >= 2:
+        results["ensemble_oof"] = sum(trained_oofs) / len(trained_oofs)
+        results["ensemble_f1_05"] = f1_score(labels, results["ensemble_oof"] > 0.5)
 
     return results
 
@@ -177,12 +224,11 @@ def build_stacking_ensemble(
     """Train a logistic regression on OOF probabilities as a stacking meta-learner."""
     oof_df = pd.DataFrame(index=labels.index)
     model_keys = []
-    if "lgbm_oof" in results:
-        oof_df["lgbm"] = results["lgbm_oof"]
-        model_keys.append("lgbm")
-    if "xgb_oof" in results:
-        oof_df["xgb"] = results["xgb_oof"]
-        model_keys.append("xgb")
+    for key, value in results.items():
+        if key.endswith("_oof") and isinstance(value, pd.Series) and key != "ensemble_oof":
+            model_key = key[:-4]  # strip "_oof" suffix
+            oof_df[model_key] = value
+            model_keys.append(model_key)
 
     if len(model_keys) < 2:
         results["ensemble_mode"] = "mean"
@@ -201,31 +247,26 @@ def build_stacking_ensemble(
 
 
 def predict_ensemble_proba(
-    lgbm_proba: np.ndarray | None,
-    xgb_proba: np.ndarray | None,
+    model_probas: dict[str, np.ndarray],
     results: dict,
 ) -> np.ndarray:
     """Combine model probabilities using the configured ensemble mode."""
     mode = results.get("ensemble_mode", "mean")
     if mode == "stacking" and "stacker" in results:
-        parts = {}
-        if lgbm_proba is not None:
-            parts["lgbm"] = lgbm_proba
-        if xgb_proba is not None:
-            parts["xgb"] = xgb_proba
-        if not parts:
+        if not model_probas:
             raise RuntimeError("no model probabilities for stacking")
-        df = pd.DataFrame(parts)
+        df = pd.DataFrame(model_probas)
         return results["stacker"].predict_proba(df)[:, 1]
     # Default: mean
-    probas = [p for p in [lgbm_proba, xgb_proba] if p is not None]
-    if not probas:
+    if not model_probas:
         raise RuntimeError("no model probabilities for ensemble")
+    probas = list(model_probas.values())
     return sum(probas) / len(probas)
 
 
 def optimize_thresholds(results: dict, labels: pd.Series) -> dict:
-    oof_keys = [k for k in ["lgbm_oof", "xgb_oof", "ensemble_oof"] if k in results]
+    oof_keys = [k for k in results
+                if k.endswith("_oof") and isinstance(results[k], pd.Series)]
     for key in oof_keys:
         best_t = 0.5
         best_f1 = 0.0
@@ -244,36 +285,38 @@ def save_ensemble_artifacts(results: dict, run_tag: str | None = None) -> None:
     OOF_DIR.mkdir(parents=True, exist_ok=True)
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-    if "lgbm_oof" in results:
-        results["lgbm_oof"].to_csv(OOF_DIR / f"{prefix}oof_lgbm.csv", index=True, header=True)
-    if "xgb_oof" in results:
-        results["xgb_oof"].to_csv(OOF_DIR / f"{prefix}oof_xgb.csv", index=True, header=True)
-    if "ensemble_oof" in results:
-        results["ensemble_oof"].to_csv(OOF_DIR / f"{prefix}oof_ensemble.csv", index=True, header=True)
+    # OOF CSVs: any key ending in _oof
+    for key, value in results.items():
+        if key.endswith("_oof") and isinstance(value, pd.Series):
+            value.to_csv(OOF_DIR / f"{prefix}{key}.csv", index=True, header=True)
 
-    for fold_idx, model in enumerate(results.get("lgbm_models", [])):
-        joblib.dump(model, MODEL_DIR / f"{prefix}lgbm_fold{fold_idx}.pkl")
-    for fold_idx, model in enumerate(results.get("xgb_models", [])):
-        joblib.dump(model, MODEL_DIR / f"{prefix}xgb_fold{fold_idx}.pkl")
+    # Model .pkl: any key ending in _models
+    for key, model_list in results.items():
+        if key.endswith("_models") and isinstance(model_list, list):
+            model_name = key[:-7]  # strip "_models"
+            for fold_idx, model in enumerate(model_list):
+                joblib.dump(model, MODEL_DIR / f"{prefix}{model_name}_fold{fold_idx}.pkl")
 
+    # Stacker
     if "stacker" in results:
         joblib.dump(results["stacker"], MODEL_DIR / f"{prefix}stacker.pkl")
 
-    for key in ["lgbm_feature_cols", "xgb_feature_cols"]:
-        if key in results:
+    # Feature columns: any key ending in _feature_cols
+    for key, cols in results.items():
+        if key.endswith("_feature_cols") and isinstance(cols, list):
             import json
             with open(MODEL_DIR / f"{prefix}{key}.json", "w") as fc:
-                json.dump(results[key], fc, indent=2)
+                json.dump(cols, fc, indent=2)
 
+    # Info file
     with open(MODEL_DIR / f"{prefix}ensemble_info.txt", "w") as f:
-        for key in ["lgbm_fold_scores", "xgb_fold_scores"]:
-            if key in results:
+        for key in sorted(results):
+            if key.endswith("_fold_scores"):
                 f.write(f"{key}={results[key]}\n")
         for suffix in ["best_threshold", "best_f1"]:
-            for model in ["lgbm", "xgb", "ensemble"]:
-                k = f"{model}_oof_{suffix}"
-                if k in results:
-                    f.write(f"{k}={results[k]:.4f}\n")
+            for key in sorted(results):
+                if key.endswith(f"_oof_{suffix}"):
+                    f.write(f"{key}={results[key]:.4f}\n")
         if "stacker_coef" in results:
             f.write(f"stacker_coef={results['stacker_coef']}\n")
         if "selected_features_per_fold" in results:

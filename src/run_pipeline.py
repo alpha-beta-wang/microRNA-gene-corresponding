@@ -103,24 +103,21 @@ def _submit_standard(
     model_names: list[str],
     tag_prefix: str,
 ) -> None:
-    lgbm_cols = results.get("lgbm_feature_cols")
-    xgb_cols = results.get("xgb_feature_cols")
+    for m in model_names:
+        models_key = f"{m}_models"
+        if models_key in results:
+            cols_key = f"{m}_feature_cols"
+            cols = results.get(cols_key)
+            t = results.get(f"{m}_oof_best_threshold", 0.5)
+            predict_and_submit(test_features, test_meta, results[models_key], t,
+                               f"{tag_prefix}submission_{m}.csv",
+                               model_feature_cols=cols)
 
-    if "lgbm" in model_names and "lgbm_models" in results:
-        lt = results.get("lgbm_oof_best_threshold", 0.5)
-        predict_and_submit(test_features, test_meta, results["lgbm_models"], lt,
-                           f"{tag_prefix}submission_lgbm.csv",
-                           model_feature_cols=lgbm_cols)
-
-    if "xgb" in model_names and "xgb_models" in results:
-        xt = results.get("xgb_oof_best_threshold", 0.5)
-        predict_and_submit(test_features, test_meta, results["xgb_models"], xt,
-                           f"{tag_prefix}submission_xgb.csv",
-                           model_feature_cols=xgb_cols)
-
-    if "ensemble_oof" in results and ("lgbm_models" in results or "xgb_models" in results):
+    # Ensemble submission (if at least one model and ensemble OOF exists)
+    if "ensemble_oof" in results and any(f"{m}_models" in results for m in model_names):
         et = results.get("ensemble_oof_best_threshold", 0.5)
-        _submit_ensemble(test_features, test_meta, results, et, f"{tag_prefix}submission_ensemble.csv")
+        _submit_ensemble(test_features, test_meta, results, et,
+                         f"{tag_prefix}submission_ensemble.csv")
 
 
 def _submit_ensemble(
@@ -132,16 +129,15 @@ def _submit_ensemble(
 ) -> None:
     from src.models.predict import _predict_with_models
 
-    lgbm_proba = None
-    xgb_proba = None
-    lgbm_cols = results.get("lgbm_feature_cols")
-    xgb_cols = results.get("xgb_feature_cols")
-    if "lgbm_models" in results:
-        lgbm_proba = _predict_with_models(test_features, results["lgbm_models"], lgbm_cols)
-    if "xgb_models" in results:
-        xgb_proba = _predict_with_models(test_features, results["xgb_models"], xgb_cols)
+    model_probas = {}
+    for key in list(results.keys()):
+        if key.endswith("_models") and isinstance(results[key], list):
+            m = key[:-7]  # strip "_models"
+            cols_key = f"{m}_feature_cols"
+            cols = results.get(cols_key)
+            model_probas[m] = _predict_with_models(test_features, results[key], cols)
 
-    avg_proba = predict_ensemble_proba(lgbm_proba, xgb_proba, results)
+    avg_proba = predict_ensemble_proba(model_probas, results)
     predictions = (avg_proba >= threshold).astype(int)
 
     template = pd.read_csv(SUBMIT_EXAMPLE_FILE)
@@ -182,19 +178,18 @@ def main():
     if args.hyperopt == "optuna":
         from src.models.hyperopt import run_optuna
         print(f"=== hyperparameter optimization (optuna, {args.hyperopt_trials} trials) ===")
-        lgbm_params, xgb_params = run_optuna(
+        model_params = run_optuna(
             train_features, labels, model_names, args.hyperopt_trials,
         )
     else:
-        lgbm_params, xgb_params = None, None
+        model_params = {}
 
     train_kwargs = dict(
         models=model_names,
         feature_selection=args.feature_selection,
         feature_top_n=args.feature_top_n,
         feature_selection_threshold=args.feature_selection_threshold,
-        lgbm_params=lgbm_params,
-        xgb_params=xgb_params,
+        model_params=model_params,
     )
 
     if args.second_stage == "hard_negative":
