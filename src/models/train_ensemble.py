@@ -122,6 +122,23 @@ def _base_et(seed: int, params: dict | None = None) -> ExtraTreesClassifier:
     return ExtraTreesClassifier(**defaults)
 
 
+def _base_fm(seed: int, params: dict | None = None):
+    from src.models.factorization_machine import FactorizationMachineClassifier
+    defaults = dict(
+        n_factors=8,
+        learning_rate=0.01,
+        epochs=200,
+        batch_size=64,
+        reg_w=0.001,
+        reg_v=0.001,
+        random_state=seed,
+        verbose=0,
+    )
+    if params:
+        defaults.update(params)
+    return FactorizationMachineClassifier(**defaults)
+
+
 # --- model registry ---
 MODEL_REGISTRY: dict[str, dict] = {
     "lgbm": {"factory": _base_lgbm, "needs_eval_set": True, "needs_scaling": False},
@@ -129,6 +146,7 @@ MODEL_REGISTRY: dict[str, dict] = {
     "svm": {"factory": _base_svm, "needs_eval_set": False, "needs_scaling": True},
     "rf": {"factory": _base_rf, "needs_eval_set": False, "needs_scaling": False},
     "extratrees": {"factory": _base_et, "needs_eval_set": False, "needs_scaling": False},
+    "fm": {"factory": _base_fm, "needs_eval_set": False, "needs_scaling": True},
 }
 
 
