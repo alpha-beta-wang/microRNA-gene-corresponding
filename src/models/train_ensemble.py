@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedKFold
@@ -91,11 +92,27 @@ def _base_svm(seed: int, params: dict | None = None) -> SVC:
     return SVC(**defaults)
 
 
+def _base_rf(seed: int, params: dict | None = None) -> RandomForestClassifier:
+    defaults = dict(
+        n_estimators=500,
+        max_depth=12,
+        min_samples_split=5,
+        min_samples_leaf=2,
+        max_features="sqrt",
+        random_state=seed,
+        verbose=0,
+    )
+    if params:
+        defaults.update(params)
+    return RandomForestClassifier(**defaults)
+
+
 # --- model registry ---
 MODEL_REGISTRY: dict[str, dict] = {
     "lgbm": {"factory": _base_lgbm, "needs_eval_set": True, "needs_scaling": False},
     "xgb": {"factory": _base_xgb, "needs_eval_set": True, "needs_scaling": False},
     "svm": {"factory": _base_svm, "needs_eval_set": False, "needs_scaling": True},
+    "rf": {"factory": _base_rf, "needs_eval_set": False, "needs_scaling": False},
 }
 
 
