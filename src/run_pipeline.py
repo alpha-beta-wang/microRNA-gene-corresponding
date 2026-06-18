@@ -77,6 +77,10 @@ def parse_args() -> argparse.Namespace:
         help="number of Optuna trials per model (default: 50)",
     )
     p.add_argument(
+        "--seed", type=int, default=None,
+        help="override global random seed (default: use config.SEED=42)",
+    )
+    p.add_argument(
         "--scale-pos-weight", type=int, default=None,
         help="set scale_pos_weight for tree models (lgbm, xgb) to handle class imbalance",
     )
@@ -217,8 +221,12 @@ def main():
                 if m in ("lgbm", "xgb"):
                     model_params.setdefault(m, {})["scale_pos_weight"] = args.scale_pos_weight
 
+    from src.config import SEED as _DEFAULT_SEED
+    effective_seed = args.seed if args.seed is not None else _DEFAULT_SEED
+
     train_kwargs = dict(
         models=model_names,
+        seed=effective_seed,
         feature_selection=args.feature_selection,
         feature_top_n=args.feature_top_n,
         feature_selection_threshold=args.feature_selection_threshold,
@@ -234,9 +242,9 @@ def main():
         s2 = ts_results["stage2"]
 
         if args.ensemble_mode == "stacking":
-            s1 = build_stacking_ensemble(s1, labels)
+            s1 = build_stacking_ensemble(s1, labels, seed=effective_seed)
             s2_labels = labels[ts_results["stage2_mask"]]
-            s2 = build_stacking_ensemble(s2, s2_labels)
+            s2 = build_stacking_ensemble(s2, s2_labels, seed=effective_seed)
 
         print("--- stage 1 results ---")
         _print_results(s1, model_names)
@@ -267,7 +275,7 @@ def main():
         results = train_ensemble(train_features, labels, **train_kwargs)
 
         if args.ensemble_mode == "stacking":
-            results = build_stacking_ensemble(results, labels)
+            results = build_stacking_ensemble(results, labels, seed=effective_seed)
 
         if args.threshold_search == "on":
             results = optimize_thresholds(results, labels)
