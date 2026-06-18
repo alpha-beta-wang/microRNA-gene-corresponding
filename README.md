@@ -277,6 +277,19 @@ Stage-1 正常 CV 训练，用 OOF 概率从真实负样本中选出预测概率
 
 基于 miRNA 倾向于结合在 mRNA 3'UTR 的生物学先验，对 seed 匹配加入位置偏置，共 8 列带 `position__` 前缀的特征。计算 seed 匹配位置（3' 端归一化距离）、加权匹配计数、3' 区域标志。无外部依赖。
 
+### `src/features/seed_type_features.py` — miRNA seed 类型特征
+
+miRNA 靶点预测领域最权威的生物学分类信号（Bartel 2009）：根据 seed 区反向互补与 gene 的匹配程度，将每个配对归类为以下四种 canonical seed 类型之一：
+
+| 类型 | 定义 | 强度 |
+|------|------|:----:|
+| 8mer | seed(2-8) RC 匹配 + gene 对应位置有 A | 最强 |
+| 7mer-m8 | seed(2-8) RC 匹配 | 强 |
+| 7mer-A1 | seed(2-7) RC 匹配 + gene 对应位置有 A | 中 |
+| 6mer | seed(2-7) RC 匹配 | 弱 |
+
+输出 6 列 `seed_type__*` 特征：四个二值标志位、最佳类型有序编码（0-4）、是否为任意 canonical 类型。无外部依赖。
+
 ### `src/features/embedding_features.py` — k-mer 统计嵌入特征
 
 非神经网络的"词嵌入"等价物：用 **3-mer 共现计数 → PPMI → TruncatedSVD** 把序列 token 映射到低维稠密向量（默认 12 维）。
@@ -324,7 +337,7 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy, position, rna_accessibility, embedding |
+| `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy, position, rna_accessibility, embedding, seed_type |
 | `--models` | `lgbm,xgb` | 模型：lgbm, xgb, svm, rf, extratrees, fm（任意组合逗号分隔） |
 | `--run-tag` | — | 实验标签，用于隔离输出文件 |
 | `--threshold-search` | `on` | OOF 最优阈值搜索 |
@@ -448,6 +461,12 @@ python -m src.run_pipeline --feature-blocks basic,match,kmer --hyperopt optuna -
 
 # 启用 3' 端位置加权特征（31 特征）
 python -m src.run_pipeline --feature-blocks basic,match,position
+
+# 启用 seed 类型特征（6 特征，无外部依赖）
+python -m src.run_pipeline --feature-blocks basic,match,seed_type
+
+# seed 类型 + kmer + rna_energy + stacking（推荐最强组合）
+python -m src.run_pipeline --feature-blocks basic,match,kmer,rna_energy,seed_type --models lgbm,xgb,svm,rf,extratrees,fm --ensemble-mode stacking --missing-external-policy skip
 
 # 启用 k-mer 统计嵌入特征（~39 特征）
 python -m src.run_pipeline --feature-blocks basic,match,embedding

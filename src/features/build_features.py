@@ -54,6 +54,14 @@ def _make_position():
 _register("position", _make_position)
 
 
+def _make_seed_type():
+    from src.features.seed_type_features import compute_seed_type_features
+    return compute_seed_type_features
+
+
+_register("seed_type", _make_seed_type)
+
+
 def _make_embedding():
     from src.features.embedding_features import EmbeddingFeaturizer
     return EmbeddingFeaturizer()
