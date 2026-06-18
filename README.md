@@ -277,7 +277,7 @@ Stage-1 正常 CV 训练，用 OOF 概率从真实负样本中选出预测概率
 
 基于 miRNA 倾向于结合在 mRNA 3'UTR 的生物学先验，对 seed 匹配加入位置偏置，共 8 列带 `position__` 前缀的特征。计算 seed 匹配位置（3' 端归一化距离）、加权匹配计数、3' 区域标志。无外部依赖。
 
-### `src/features/seed_type_features.py` — miRNA seed 类型特征
+### `src/features/seed_type_features.py` — miRNA seed 类型特征 + GU wobble 配对特征
 
 miRNA 靶点预测领域最权威的生物学分类信号（Bartel 2009）：根据 seed 区反向互补与 gene 的匹配程度，将每个配对归类为以下四种 canonical seed 类型之一：
 
@@ -288,7 +288,11 @@ miRNA 靶点预测领域最权威的生物学分类信号（Bartel 2009）：根
 | 7mer-A1 | seed(2-7) RC 匹配 + gene 对应位置有 A | 中 |
 | 6mer | seed(2-7) RC 匹配 | 弱 |
 
-输出 6 列 `seed_type__*` 特征：四个二值标志位、最佳类型有序编码（0-4）、是否为任意 canonical 类型。无外部依赖。
+输出 6 列 canonical seed 特征：四个二值标志位、最佳类型有序编码（0-4）、是否为任意 canonical 类型。
+
+另包含 **GU wobble 配对特征**（4 列）：GU wobble 是 RNA 中第三种碱基配对（G:U 和 U:G），弱于 Watson-Crick 但有生物功能。对 seed 区（2-8位）扫描 gene 所有等长窗口，统计最佳窗口中的 wobble 配对数、比例、Watson-Crick+wobble 总数、是否存在 wobble 对。
+
+共 10 列 `seed_type__*` 特征，无外部依赖。
 
 ### `src/features/embedding_features.py` — k-mer 统计嵌入特征
 
@@ -351,6 +355,7 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 | `--feature-selection-threshold` | `median` | select_from_model 的阈值（备选策略） |
 | `--hyperopt` | `none` | 超参数搜索：none / optuna |
 | `--hyperopt-trials` | `50` | Optuna 每模型搜索 trial 数 |
+| `--seed` | `42` | 覆盖全局随机种子（默认使用 config.SEED=42） |
 | `--scale-pos-weight` | — | 树模型正样本损失权重，缓解类别不平衡（如 55 等价于 pos55） |
 | `--embedding-k` | `3` | k-mer 大小（embedding tokenization） |
 | `--embedding-dim` | `12` | 3-mer 共现 SVD 降维后的 embedding 维度 |
@@ -408,11 +413,31 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 | XGBoost | 0.8311 | 0.460 |
 | Ensemble | 0.8310 | 0.476 |
 
-### Stacking 集成结果
+### basic+match+kmer+rna_energy+seed_type（196 特征）
+
+| 模型 | OOF 最优 F1 | 最优阈值 |
+|------|:-----------:|:--------:|
+| LightGBM | 0.8321 | 0.460 |
+| XGBoost | 0.8285 | 0.460 |
+| SVM (RBF) | 0.8342 | 0.444 |
+| Random Forest | 0.8332 | 0.460 |
+| Extra-Trees | 0.8299 | 0.260 |
+| FM | 0.7509 | 0.100 |
+| **Stacking (全6模型)** | **0.8377** | 0.524 |
+| Stacking (不含FM) | 0.8366 | 0.508 |
+
+### basic+match+kmer+rna_energy+seed_type+wobble（200 特征）
+
+| 模型组合 | OOF 最优 F1 |
+|---------|:-----------:|
+| Stacking (全6模型) | 0.8370 |
+
+### Stacking 集成结果（历史汇总）
 
 | 特征 | 模型组合 | OOF 最优 F1 |
 |------|---------|:-----------:|
-| basic+match+kmer+rna_energy | lgbm,xgb,svm,rf,extratrees,fm | **0.8371** |
+| basic+match+kmer+rna_energy+**seed_type** | lgbm,xgb,svm,rf,extratrees,fm | **0.8377** |
+| basic+match+kmer+rna_energy | lgbm,xgb,svm,rf,extratrees,fm | 0.8371 |
 | basic+match+kmer+rna_energy | lgbm,xgb,svm,rf,extratrees | 0.8361 |
 | 全部特征 (202维) | lgbm,xgb,svm,rf,extratrees,fm | 0.8351 |
 
@@ -465,8 +490,11 @@ python -m src.run_pipeline --feature-blocks basic,match,position
 # 启用 seed 类型特征（6 特征，无外部依赖）
 python -m src.run_pipeline --feature-blocks basic,match,seed_type
 
-# seed 类型 + kmer + rna_energy + stacking（推荐最强组合）
+# seed 类型 + kmer + rna_energy + stacking（当前 OOF 最强组合，F1=0.8377）
 python -m src.run_pipeline --feature-blocks basic,match,kmer,rna_energy,seed_type --models lgbm,xgb,svm,rf,extratrees,fm --ensemble-mode stacking --missing-external-policy skip
+
+# 使用不同随机种子复现实验
+python -m src.run_pipeline --feature-blocks basic,match,kmer,rna_energy,seed_type --models lgbm,xgb,svm,rf,extratrees,fm --ensemble-mode stacking --missing-external-policy skip --seed 0
 
 # 启用 k-mer 统计嵌入特征（~39 特征）
 python -m src.run_pipeline --feature-blocks basic,match,embedding
