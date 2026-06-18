@@ -54,6 +54,14 @@ def _make_position():
 _register("position", _make_position)
 
 
+def _make_embedding():
+    from src.features.embedding_features import EmbeddingFeaturizer
+    return EmbeddingFeaturizer()
+
+
+_register("embedding", _make_embedding)
+
+
 def _make_rna_accessibility():
     from functools import partial
     from src.features.rna_energy_features import compute_rna_energy_features

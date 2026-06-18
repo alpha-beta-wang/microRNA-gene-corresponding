@@ -277,6 +277,16 @@ Stage-1 正常 CV 训练，用 OOF 概率从真实负样本中选出预测概率
 
 基于 miRNA 倾向于结合在 mRNA 3'UTR 的生物学先验，对 seed 匹配加入位置偏置，共 8 列带 `position__` 前缀的特征。计算 seed 匹配位置（3' 端归一化距离）、加权匹配计数、3' 区域标志。无外部依赖。
 
+### `src/features/embedding_features.py` — k-mer 统计嵌入特征
+
+非神经网络的"词嵌入"等价物：用 **3-mer 共现计数 → PPMI → TruncatedSVD** 把序列 token 映射到低维稠密向量（默认 12 维）。
+
+- token 来源：miRNA 全长、miRNA seed 区、gene _best_seed_window 局部窗口
+- 共现窗口半径可调（`--embedding-context-radius`）
+- 在**训练集**上拟合 embedding 基座，**投影**到测试集（避免泄漏）
+- 输出 miRNA seed embedding、gene window embedding、两者绝对差、余弦相似度、点积、L2 距离，共 39 列 `embed__*` 特征
+- 无外部依赖，仅需 numpy + sklearn（已由基础依赖提供）
+
 ### `src/features/build_features.py` — 特征块注册与统一拼装
 
 根据 `--feature-blocks` 参数懒加载对应的特征计算函数，拼接 train/test 特征表，去重列名并对齐测试集列到训练集。支持通过 `block_kwargs` 传递参数给特征函数。
@@ -314,7 +324,7 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy, position, rna_accessibility |
+| `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy, position, rna_accessibility, embedding |
 | `--models` | `lgbm,xgb` | 模型：lgbm, xgb, svm, rf, extratrees, fm（任意组合逗号分隔） |
 | `--run-tag` | — | 实验标签，用于隔离输出文件 |
 | `--threshold-search` | `on` | OOF 最优阈值搜索 |
@@ -329,6 +339,10 @@ python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --thre
 | `--hyperopt` | `none` | 超参数搜索：none / optuna |
 | `--hyperopt-trials` | `50` | Optuna 每模型搜索 trial 数 |
 | `--scale-pos-weight` | — | 树模型正样本损失权重，缓解类别不平衡（如 55 等价于 pos55） |
+| `--embedding-k` | `3` | k-mer 大小（embedding tokenization） |
+| `--embedding-dim` | `12` | 3-mer 共现 SVD 降维后的 embedding 维度 |
+| `--embedding-context-radius` | `2` | 共现计数上下文窗口半径 |
+| `--embedding-min-count` | `2` | 3-mer 最小出现次数（低于此值的 token 被忽略） |
 
 流水线串联：
 
@@ -434,6 +448,15 @@ python -m src.run_pipeline --feature-blocks basic,match,kmer --hyperopt optuna -
 
 # 启用 3' 端位置加权特征（31 特征）
 python -m src.run_pipeline --feature-blocks basic,match,position
+
+# 启用 k-mer 统计嵌入特征（~39 特征）
+python -m src.run_pipeline --feature-blocks basic,match,embedding
+
+# 位置 + 嵌入 + k-mer 联合（~382 特征）
+python -m src.run_pipeline --feature-blocks basic,match,position,embedding,kmer
+
+# 定制 embedding 参数（8 维、更大上下文窗口）
+python -m src.run_pipeline --feature-blocks basic,match,embedding --embedding-dim 8 --embedding-context-radius 4
 
 # 启用靶点可及性特征（34 特征，需 viennarna）
 python -m src.run_pipeline --feature-blocks basic,match,rna_accessibility

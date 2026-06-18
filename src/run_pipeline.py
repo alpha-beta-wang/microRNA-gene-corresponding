@@ -80,6 +80,22 @@ def parse_args() -> argparse.Namespace:
         "--scale-pos-weight", type=int, default=None,
         help="set scale_pos_weight for tree models (lgbm, xgb) to handle class imbalance",
     )
+    p.add_argument(
+        "--embedding-k", type=int, default=3,
+        help="k-mer size for embedding tokenization (default: 3)",
+    )
+    p.add_argument(
+        "--embedding-dim", type=int, default=12,
+        help="embedding dimension after TruncatedSVD reduction (default: 12)",
+    )
+    p.add_argument(
+        "--embedding-context-radius", type=int, default=2,
+        help="context window radius for co-occurrence counting (default: 2)",
+    )
+    p.add_argument(
+        "--embedding-min-count", type=int, default=2,
+        help="minimum token count to include in vocabulary (default: 2)",
+    )
     return p.parse_args()
 
 
@@ -170,8 +186,17 @@ def main():
     )
 
     print(f"=== building features (blocks: {feature_blocks}) ===")
+    block_kwargs = {}
+    if "embedding" in feature_blocks:
+        block_kwargs["embedding"] = {
+            "k": args.embedding_k,
+            "dim": args.embedding_dim,
+            "context_radius": args.embedding_context_radius,
+            "min_count": args.embedding_min_count,
+        }
     train_features, test_features = build_features(
         bundle.train, bundle.test, feature_blocks,
+        block_kwargs=block_kwargs,
         missing_external_policy=args.missing_external_policy,
     )
 
