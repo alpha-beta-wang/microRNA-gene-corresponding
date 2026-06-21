@@ -1,0 +1,14 @@
+lgbm_fold_scores=[0.8270042194092827, 0.8141592920353983, 0.8207171314741036, 0.824, 0.8434782608695652]
+xgb_fold_scores=[0.7766990291262136, 0.8036529680365296, 0.7707317073170732, 0.7450980392156863, 0.782608695652174]
+lgbm_fold_thresholds=[0.48, 0.38, 0.1, 0.53, 0.49]
+xgb_fold_thresholds=[0.30000000000000004, 0.28, 0.28, 0.21000000000000002, 0.14]
+ensemble_fold_thresholds=[0.33999999999999997, 0.37, 0.48, 0.38, 0.28]
+lgbm_oof_best_threshold=0.4920
+lgbm_oof_best_f1=0.8278
+lgbm_nested_threshold=0.4800
+xgb_oof_best_threshold=0.2840
+xgb_oof_best_f1=0.8287
+xgb_nested_threshold=0.2800
+ensemble_oof_best_threshold=0.3400
+ensemble_oof_best_f1=0.8287
+ensemble_nested_threshold=0.3700

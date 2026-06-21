@@ -1,8 +1,10 @@
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
 from sklearn.metrics import f1_score
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 from xgboost import XGBClassifier
 
 from src.config import MODEL_DIR, OOF_DIR, SEED, N_SPLITS
@@ -10,7 +12,7 @@ from src.config import MODEL_DIR, OOF_DIR, SEED, N_SPLITS
 import joblib
 
 
-def _base_lgbm(seed: int) -> LGBMClassifier:
+def _base_lgbm(seed: int, scale_pos_weight: float = 1.0) -> LGBMClassifier:
     return LGBMClassifier(
         n_estimators=3000,
         learning_rate=0.01,
@@ -24,10 +26,11 @@ def _base_lgbm(seed: int) -> LGBMClassifier:
         random_state=seed,
         early_stopping_round=100,
         verbose=-1,
+        scale_pos_weight=scale_pos_weight,
     )
 
 
-def _base_xgb(seed: int) -> XGBClassifier:
+def _base_xgb(seed: int, scale_pos_weight: float = 1.0) -> XGBClassifier:
     return XGBClassifier(
         n_estimators=3000,
         learning_rate=0.01,
@@ -40,7 +43,19 @@ def _base_xgb(seed: int) -> XGBClassifier:
         early_stopping_rounds=100,
         eval_metric="logloss",
         verbosity=0,
+        scale_pos_weight=scale_pos_weight,
     )
+
+
+def _best_threshold(y_true, proba) -> float:
+    best_t = 0.5
+    best_f1 = -1.0
+    for t in np.linspace(0.1, 0.9, 81):
+        cur = f1_score(y_true, (proba >= t).astype(int))
+        if cur > best_f1:
+            best_f1 = cur
+            best_t = float(t)
+    return best_t
 
 
 def train_ensemble(
@@ -48,8 +63,15 @@ def train_ensemble(
     labels: pd.Series,
     n_splits: int = N_SPLITS,
     seed: int = SEED,
+    groups: Optional[pd.Series] = None,
+    scale_pos_weight: float = 1.0,
 ) -> dict:
-    folds = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    if groups is not None:
+        folds = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+        split_iter = folds.split(features, labels, groups)
+    else:
+        folds = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+        split_iter = folds.split(features, labels)
     results = {
         "lgbm_oof": pd.Series(np.full(len(labels), 0.5), index=labels.index, name="lgbm_oof"),
         "xgb_oof": pd.Series(np.full(len(labels), 0.5), index=labels.index, name="xgb_oof"),
@@ -57,25 +79,33 @@ def train_ensemble(
         "xgb_models": [],
         "lgbm_fold_scores": [],
         "xgb_fold_scores": [],
+        "lgbm_fold_thresholds": [],
+        "xgb_fold_thresholds": [],
+        "ensemble_fold_thresholds": [],
     }
 
-    for fold_idx, (train_idx, val_idx) in enumerate(folds.split(features, labels)):
+    for fold_idx, (train_idx, val_idx) in enumerate(split_iter):
         X_tr, X_val = features.iloc[train_idx], features.iloc[val_idx]
         y_tr, y_val = labels.iloc[train_idx], labels.iloc[val_idx]
 
-        lgbm = _base_lgbm(seed + fold_idx)
+        lgbm = _base_lgbm(seed + fold_idx, scale_pos_weight=scale_pos_weight)
         lgbm.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], eval_metric="logloss")
         lgbm_proba = lgbm.predict_proba(X_val)[:, 1]
         results["lgbm_oof"].iloc[val_idx] = lgbm_proba
         results["lgbm_fold_scores"].append(f1_score(y_val, lgbm_proba > 0.5))
         results["lgbm_models"].append(lgbm)
 
-        xgb = _base_xgb(seed + fold_idx)
+        xgb = _base_xgb(seed + fold_idx, scale_pos_weight=scale_pos_weight)
         xgb.fit(X_tr, y_tr, eval_set=[(X_val, y_val)])
         xgb_proba = xgb.predict_proba(X_val)[:, 1]
         results["xgb_oof"].iloc[val_idx] = xgb_proba
         results["xgb_fold_scores"].append(f1_score(y_val, xgb_proba > 0.5))
         results["xgb_models"].append(xgb)
+
+        ens_proba = (lgbm_proba + xgb_proba) / 2
+        results["lgbm_fold_thresholds"].append(_best_threshold(y_val, lgbm_proba))
+        results["xgb_fold_thresholds"].append(_best_threshold(y_val, xgb_proba))
+        results["ensemble_fold_thresholds"].append(_best_threshold(y_val, ens_proba))
 
     ensemble_proba = (results["lgbm_oof"] + results["xgb_oof"]) / 2
     results["ensemble_oof"] = ensemble_proba
@@ -95,6 +125,10 @@ def optimize_thresholds(results: dict, labels: pd.Series) -> dict:
                 best_t = t
         results[f"{key}_best_threshold"] = best_t
         results[f"{key}_best_f1"] = best_f1
+
+    for prefix in ["lgbm", "xgb", "ensemble"]:
+        ts = results[f"{prefix}_fold_thresholds"]
+        results[f"{prefix}_nested_threshold"] = float(np.median(ts))
     return results
 
 
@@ -114,9 +148,15 @@ def save_ensemble_artifacts(results: dict) -> None:
     with open(MODEL_DIR / "ensemble_info.txt", "w") as f:
         f.write(f"lgbm_fold_scores={results['lgbm_fold_scores']}\n")
         f.write(f"xgb_fold_scores={results['xgb_fold_scores']}\n")
-        f.write(f"lgbm_best_threshold={results['lgbm_oof_best_threshold']:.4f}\n")
-        f.write(f"lgbm_best_f1={results['lgbm_oof_best_f1']:.4f}\n")
-        f.write(f"xgb_best_threshold={results['xgb_oof_best_threshold']:.4f}\n")
-        f.write(f"xgb_best_f1={results['xgb_oof_best_f1']:.4f}\n")
-        f.write(f"ensemble_best_threshold={results['ensemble_oof_best_threshold']:.4f}\n")
-        f.write(f"ensemble_best_f1={results['ensemble_oof_best_f1']:.4f}\n")
+        f.write(f"lgbm_fold_thresholds={results['lgbm_fold_thresholds']}\n")
+        f.write(f"xgb_fold_thresholds={results['xgb_fold_thresholds']}\n")
+        f.write(f"ensemble_fold_thresholds={results['ensemble_fold_thresholds']}\n")
+        f.write(f"lgbm_oof_best_threshold={results['lgbm_oof_best_threshold']:.4f}\n")
+        f.write(f"lgbm_oof_best_f1={results['lgbm_oof_best_f1']:.4f}\n")
+        f.write(f"lgbm_nested_threshold={results['lgbm_nested_threshold']:.4f}\n")
+        f.write(f"xgb_oof_best_threshold={results['xgb_oof_best_threshold']:.4f}\n")
+        f.write(f"xgb_oof_best_f1={results['xgb_oof_best_f1']:.4f}\n")
+        f.write(f"xgb_nested_threshold={results['xgb_nested_threshold']:.4f}\n")
+        f.write(f"ensemble_oof_best_threshold={results['ensemble_oof_best_threshold']:.4f}\n")
+        f.write(f"ensemble_oof_best_f1={results['ensemble_oof_best_f1']:.4f}\n")
+        f.write(f"ensemble_nested_threshold={results['ensemble_nested_threshold']:.4f}\n")
