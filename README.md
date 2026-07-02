@@ -1,277 +1,566 @@
-# microRNA-gene 关系预测
+# microRNA-gene-corresponding
 
-DataFountain 比赛 [基于序列信息的 microRNA 和 gene 关系检测](https://www.datafountain.cn/competitions/534)。
-任务:给定 (gene, miRNA) 对,二分类预测是否为 Functional MTI。**评测指标 F1**。
+microRNA 与 gene 功能性 MTI (MicroRNA-Target Interaction) 二分类预测。
 
-## 数据
+赛题来源：[DataFountain 竞赛 #534](https://www.datafountain.cn/competitions/534)
 
-| 文件 | 行数 | 说明 |
-|---|---|---|
-| `data/train_dataset/Train.csv` | 738 | gene, miRNA, label(Functional / Non-Functional MTI) |
-| `data/test_dataset.csv` | 185 | gene, miRNA |
-| `data/train_dataset/gene_seq.csv` | 16127 | DNA 序列库(ACGT) |
-| `data/train_dataset/mirna_seq.csv` | 5312 | RNA 序列库(ACGU) |
+---
 
-样本量小(<800 训练 / <200 测试),CV 与线上方差都显著:**1 个样本翻转 ≈ F1 变化 0.5–1%**。
+## 赛题背景
 
-训练集正负 514 / 224(正样本率 69.7%);
-通过提交「全 1 baseline」反推**测试集真实正样本率约 65%**。
+microRNA 在基因表达调控中起重要作用。microRNA 通过与 gene 的 mRNA 结合来调控基因的表达。预测潜在的 microRNA 与 gene 的关联关系可以帮助科学家更好地理解疾病的发生机制，并为精准医疗提供潜在的靶点。
+
+**任务**：给定一对 (gene, miRNA) 及其序列，判断该配对是否为 Functional MTI（二分类）。
+
+**评估指标**：F1-score。
+
+---
+
+## 数据集
+
+| 文件 | 路径 | 说明 |
+|------|------|------|
+| 训练集 | `data/train_dataset/Train.csv` | 训练集，标签为 Functional MTI / Non-Functional MTI |
+| 测试集 | `data/test_dataset.csv` | 测试集，无标签 |
+| Gene 序列 | `data/train_dataset/gene_seq.csv` | Gene 名称与完整序列映射 |
+| miRNA 序列 | `data/train_dataset/mirna_seq.csv` | miRNA 名称与序列映射 |
+| 提交样例 | `data/submit_example.csv` | 提交格式：gene, miRNA, results (0/1) |
+
+**训练集规模**：738 条 | **测试集规模**：185 条
+
+---
+
+## Quickstart
+
+### 环境要求
+
+- Python 3.11+
+- Windows / Linux / macOS
+
+### 1. 创建虚拟环境
+
+```bash
+python -m venv .venv
+```
+
+### 2. 激活虚拟环境
+
+**Windows (bash)**：
+```bash
+source .venv/Scripts/activate
+```
+
+**Windows (PowerShell)**：
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+**Linux/macOS**：
+```bash
+source .venv/bin/activate
+```
+
+### 3. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. 运行基线流水线
+
+```bash
+python -m src.run_pipeline
+```
+
+一键完成：数据加载 → 特征构建 → 双模型训练 → 阈值优化 → 提交生成。
+
+### 5. 运行泄漏检查
+
+```bash
+python -m src.models.validate_groups
+```
+
+### 6. 查看产出
+
+```
+outputs/
+├── features/          # 合并后的特征表 (parquet)
+├── oof/               # 交叉验证 OOF 预测
+│   ├── oof_lgbm.csv
+│   ├── oof_xgb.csv
+│   └── oof_ensemble.csv
+├── models/            # 训练好的模型文件
+│   ├── lgbm_fold*.pkl
+│   ├── xgb_fold*.pkl
+│   ├── svm_fold*.pkl
+│   ├── rf_fold*.pkl
+│   ├── extratrees_fold*.pkl
+│   ├── fm_fold*.pkl
+│   └── ensemble_info.txt
+└── submissions/       # 提交文件
+    ├── submission_lgbm.csv
+    ├── submission_xgb.csv
+    └── submission_ensemble.csv
+```
+
+---
 
 ## 项目结构
 
 ```
-src/
-├── config.py                              # 路径与常量(SEED=42, N_SPLITS=5)
-├── data/load_data.py                      # 序列清洗 + 标签数值化 + 序列 left-join
-├── data/__main__.py                       # 持久化合并后的 parquet
-├── features/basic_features.py             # 长度、ACGT/ACGU 比例、GC、长度比
-├── features/sequence_match_features.py    # seed(m[1:8]) 子串/反向互补/连续匹配
-├── features/advanced_features.py          # 反向互补出现次数 + 命中点局部 AT
-├── features/kmer_features.py              # miRNA / gene 的 char 3-mer TF-IDF
-├── models/train_lgbm.py                   # 单 LGBM 5-fold + 阈值搜索(老版,被 ensemble 取代)
-├── models/train_ensemble.py               # LGBM + XGB 5-fold + scale_pos_weight + nested 阈值
-├── models/predict.py                      # 跨 fold 概率平均 + 阈值 + 输出 submission.csv
-├── models/validate_groups.py              # GroupKFold(gene/miRNA/pair) 诊断泄漏
-├── run_baseline.py                        # 单 seed 主入口(StratifiedKFold + ensemble)
-└── run_multiseed.py                       # 多 seed × LGBM+XGB × 5-fold 50 模型平均(主推)
-results.csv                                # 提交档案:每行一份 csv 的预测分布与线上 F1
-outputs/                                   # 训练产物(.gitignore)
-├── features/                              # parquet 中间产物
-├── models/                                # *.pkl 与 ensemble_info.txt
-├── oof/                                   # oof_lgbm/xgb/ensemble.csv + 多 seed OOF
-└── submissions/                           # 最终提交的 csv
+.
+├── data/                          # 原始赛题数据
+│   ├── test_dataset.csv
+│   ├── submit_example.csv
+│   └── train_dataset/
+│       ├── Train.csv
+│       ├── gene_seq.csv
+│       └── mirna_seq.csv
+├── src/                           # 源代码
+│   ├── config.py                  # 路径、列名、随机种子等全局常量
+│   ├── run_pipeline.py            # 一键入口：数据→特征→训练→提交
+│   ├── data/
+│   │   ├── load_data.py           # 数据读取、清洗、merge
+│   │   └── __main__.py            # 数据加载自检入口
+│   ├── features/
+│   │   ├── basic_features.py      # 基础序列特征（长度、GC、核苷酸比例）
+│   │   └── sequence_match_features.py  # 配对特征（seed 匹配、连续配对等）
+│   └── models/
+│       ├── train_ensemble.py      # LGBM + XGBoost 双模型训练与交叉验证
+│       ├── predict.py             # 推理与提交文件生成
+│       └── validate_groups.py     # GroupKFold 实体泄漏检查
+├── outputs/                       # 生成的中间文件和提交（不提交 git）
+│   ├── features/
+│   ├── oof/
+│   ├── models/
+│   └── submissions/
+├── requirements.txt               # Python 依赖
+├── .gitignore                     # 排除 .venv/ 和 outputs/
+└── README.md
 ```
 
-## 快速开始
+---
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+## 模块介绍
 
-# 单 seed ensemble(快,~1 分钟)
-python -m src.run_baseline
+### `src/config.py` — 全局配置
 
-# 多 seed × k-mer 主推流水线(~10 分钟,产出 9 个阈值的提交)
-python -m src.run_multiseed
-
-# 诊断:GroupKFold 看是否被同 gene / 同 miRNA 抬高了 OOF
-python -m src.models.validate_groups
-```
-
-提交输出在 `outputs/submissions/`,挑一份 `online_f1` 留空的交到平台,把分数填回 `results.csv`。
-
-## 实验时间线与方法论
-
-### 起点 — 基线 0.800
-
-- 24 个浅特征(基础统计 + seed 反向互补匹配)
-- LightGBM + XGBoost 双模型平均,5-fold StratifiedKFold,OOF 上调阈值
-- 第一次提交 ensemble@thr=0.50 → **线上 F1 0.800**
-
-### 1) 修反向互补 bug
-
-`features/sequence_match_features.py:5` 的互补表本来是 `"ACGUT" → "UGCAA"`,
-让 `A → U`。但 gene 是 DNA 不含 U,反向互补结果含 U 后永远匹配不上。
-**正确的 Watson-Crick 配对**(miRNA seed 找 DNA 靶点):`A↔T, C↔G, G↔C, U→A, T→A`。
-
-修完特征 `seed_revcomp_in_gene` 命中率从 0% → 52%。
-
-**经验**:**每写一个生物学特征,都要 sanity check 一下"它到底取到了什么值"** —
-看均值、与标签的相关性、零方差列。
-
-### 2) GroupKFold 诊断
-
-`StratifiedKFold` 让同一个 gene / miRNA 既出现在训练 fold 又出现在验证 fold,
-本地 OOF 会被同 gene 泄漏抬高。改用 `validate_groups.py` 看清:
-
-| 验证策略 | mean F1 |
-|---|---|
-| StratifiedKFold | 0.8345 |
-| GroupKFold(gene) | 0.8329 — 几乎不变,说明 gene 重叠不是泄漏来源 |
-| **GroupKFold(miRNA)** | **0.8211**(-1.3) |
-| GroupKFold(pair) | 0.8221 |
-
-**关键认知**:模型对未见过的 miRNA 泛化最弱,fold 间方差也最大(0.77–0.87)。
-线上 0.80 ≈ GroupKFold(miRNA) 的下半段,说明**该信 GroupKFold 而不是 StratifiedKFold**。
-StratifiedKFold OOF F1 比真实泛化乐观 ~1.3 个点。
-
-### 3) Nested CV 阈值(失败的尝试)
-
-阈值搜索在 OOF 上做,容易过拟合。改成「每 fold 自己挑阈值,取中位数」。
-理论上更稳,但**实际线上从 0.800 → 0.788(-0.012)**,因为:
-
-- 中位数阈值 0.45 < 默认 0.50,提交正样本率从 96.8% → 95.7%
-- 这次"挪了 11 个样本从 1 翻到 0",其中混入了真正样本 → 砸 F1
-
-**���验**:在小测试集上,阈值小幅微调改不出收益,**根本问题是模型概率排序质量**。
-
-### 4) 阈值上探 — 找到真正的甜蜜点
-
-提交一份**全 1 baseline**(`all_one`)作为诊断:F1 = 0.7869 →
-反推真实正样本数 P = 0.7869 × 185 / (2 - 0.7869) ≈ **120**(正样本率 64.9%)。
-
-然后在 ensemble 概率上扫阈值:
-
-| 提交正样本率 | 线上 F1 |
-|---|---|
-| 100% (all_one) | 0.787 |
-| 96.8% (ens@0.50) | 0.800 |
-| **80.5% (ens@0.60)** | **0.810** ← 当时最佳 |
-| 72.4% (ens@0.65) | 0.795 |
-| 57.8% (ens@0.70) | 0.730 |
-
-**关键发现**:
-- 线上 F1 跟"提交正样本率与真实分布的距离" **不**严格单调
-- 真正决定线上 F1 的是「模型概率排序质量 × 阈值合适程度」
-- 在 65% 真实正样本率附近,适当**多判正**反而更稳(因为 F1 对漏报敏感)
-
-### 5) scale_pos_weight — 让概率分得更开
-
-正样本是多数类(70%),传统 scale_pos_weight 是 `neg/pos`,这里设 `224/514 ≈ 0.436`,
-**降低正样本权重**让模型敢预测 0。
-
-效果:
-- 测试集概率中位数从 0.72 → 0.63,概率分布拉得更开
-- 自然阈值 0.5 附近就是最优,不需要"调"出 0.60 这种奇怪值
-- spw@0.50 → **线上 F1 0.8165**(+0.006 vs 0.810)
-- 在 thr=0.48(pos_rate 83.2%)取得 spw 系列峰值 → **0.8248**
-
-**经验**:`scale_pos_weight` 不只是处理类别不平衡,还是**校准概率分布**的工具。
-对 GBDT,默认 logloss 训练出来的概率经常是有偏的(偏向多数类),线性调整 spw 就能纠正。
-
-### 6) 多 seed 模型平均(部分成功)
-
-5 个种子 × (LGBM + XGB) × 5 fold = 50 个基模型,test 概率全部平均。
-
-OOF F1 0.8287 → **0.8375**(+0.009)
-线上 同 pos_rate 下 0.8248 → 0.8175(**-0.007**)
-
-**反直觉**:OOF 涨了,线上没涨甚至略跌。原因:
-
-- 测试集 185 行太小,概率排序方差被压低后,**没体现到边界样本上**
-- spw_t48 拿 0.8248 部分靠"运气" — 它选出的 31 个负样本里多了 1–2 个真负
-- 多 seed 平均后选出的 31 个负样本是不同的组合,这次没那么"幸运"
-
-**经验**:
-- OOF 涨 ≠ 线上涨,尤其是测试集 < 200 时
-- 多 seed 平均**该做但不能指望它在小测试集上稳涨**,它的真实价值是减小提交方差(排行榜稳定性)而非上限
-- 当 OOF 涨幅 < 1% 但本地波动也接近 1%,基本说明这条路**已经接近现有特征空间的天花板**
-
-### 7) k-mer TF-IDF 特征 — 真正的突破
-
-miRNA 和 gene 各自做 char 3-gram TF-IDF(64 + 64 = 128 维),`U → T` 统一字母表后用 `TfidfVectorizer` `sublinear_tf=True` `min_df=2/5`。
+管理所有路径、列名和超参，其他模块从这里引用，避免散落魔数
 
 ```python
-# src/features/kmer_features.py
-TfidfVectorizer(analyzer="char", ngram_range=(k, k), sublinear_tf=True, norm="l2")
+TARGET_COLUMN = "results"    # 预测目标
+SEED = 42                    # 随机种子
+N_SPLITS = 5                 # 交叉验证折数
 ```
 
-跟前面 26 维基础特征拼起来 → 154 维,跑一次多 seed 平均:
+### `src/data/load_data.py` — 数据加载与清洗
 
-- OOF F1 0.8375 → 0.8377(几乎没涨)
-- **线上 F1 0.8248 → 0.8352**(+0.010)← 第 7 次新高
-- kmer@thr=0.46 / 0.47 都拿了 0.83+
+**数据流**：
 
-**惊喜点**:**OOF 没涨但线上涨了**,跟实验 6 完全相反。
-解释:k-mer 特征贡献的是**新维度的信息**(序列模式相似度),
-GBDT 在 OOF 上没把这些信号利用充分(可能是因为 OOF 样本本身就跟训练集分布近),
-但在测试集上(包含未见过 miRNA)这些 mode 信号有用武之地。
+```
+Train.csv (gene, miRNA, label) ──┐
+gene_seq.csv (label, sequence) ──┤── merge → train_merged
+mirna_seq.csv (mirna, seq)    ──┘
 
-**经验**:
-- **特征工程 > 模型调优**,对小样本任务尤其
-- 不要因为 OOF 没动就放弃一类特征 — 在分布漂移的场景下,**新特征的价值 OOF 看不出来**
-- char k-mer TF-IDF 是序列任务的万能起点,几乎零成本
-
-## 当前最高:线上 F1 = 0.8352(`submission_kmer_t46.csv`)
-
-## 调参方法论(给后来者)
-
-1. **先做诊断,再决定方向**
-   - 提交一份 `all_one` 反推测试集正样本率
-   - 跑 `validate_groups.py` 看哪个分组维度泄漏
-   - 看 OOF 概率分位数(`q10/q50/q90`)和测试集分位数对比 — 分布漂移 = 阈值要变
-
-2. **每改一处,记一次结果**
-   - `results.csv` 记每份提交的 `pos / neg / pos_rate / online_f1`
-   - 同 pos_rate 的两份提交 F1 差 → 模型排序质量差异
-   - 不同 pos_rate 同模型的 F1 → 阈值响应曲线
-
-3. **阈值不是越精细越好**
-   - 测试集 185 行,1 个样本 ≈ 0.5–1% F1
-   - 用 0.01 步长扫阈值很多时候是在跟噪声打架
-   - **真正涨分靠改特征 / 模型,不靠阈值精调**
-
-4. **优先级**
-   1. 修 bug(反向互补、特征零方差列、数据泄漏)
-   2. 找诊断信号(GroupKFold、all_one 提交)
-   3. 阈值上探至甜蜜点(2–4 个粗阈值,不要细到 0.01)
-   4. `scale_pos_weight` 校准概率
-   5. 加新特征类(k-mer、自由能、容错匹配)
-   6. 多 seed 平均(不指望涨上限,只指望减方差)
-   7. 多模型异构融合(GBDT + RF + LR/线性)
-
-## 下一步可探索方向
-
-按预期收益从高到低:
-
-### A. 更精细的 k-mer(预期 +0.5–1%)
-- 当前是 `mirna 3-mer + gene 3-mer top-256`
-- 尝试 `4-mer`(miRNA 256 + gene 256) — 信号更具体,但稀疏
-- 尝试 **seed 区域专属 k-mer**:miRNA 第 2–8 nt 的 3-mer 单独一���
-- 尝试 **interaction kmer**:miRNA 3-mer × gene 上对应反向互补的命中位置 → 这是 MTI 任务的核心信号
-
-### B. 异构模型融合(预期 +0.3–0.8%)
-当前 LGBM+XGB 都是 GBDT 同构。加入:
-- `CatBoostClassifier`(对类别特征好,可以把 miRNA 名字 / gene 名字当类别)
-- `RandomForest`(纯随机性给概率排序加噪音可能反而帮忙)
-- **逻辑回归 on 标准化 k-mer**(线性模型在 TF-IDF 上是经典组合)
-
-### C. RNA 双链折叠自由能(预期 +1–2%,工程量最大)
-- `pip install ViennaRNA`
-- 对每个 (miRNA, target site) 跑 `RNAhybrid` 或 `RNAcofold`
-- 取最小 ΔG 当特征 — 这是 TargetScan 等专业工具的核心信号
-- 工程量大,要对每个 gene 找候选 target site,但准确度高
-
-### D. 训练集 + 测试集合并的半监督
-- 把 test 拼到 train 做伪标签(用当前 0.835 模型给 test 打软标 → 高置信度的当伪正/负样本扔回训练)
-- 在 GroupKFold(miRNA)上验证不会泄漏
-
-### E. 数据扩充
-- `mirna_seq.csv` / `gene_seq.csv` 里没出现在 train/test 中的 miRNA / gene 不少
-- 可以构造负样本:从 mirna_seq 里随机抽 miRNA 配 gene_seq 里随机抽 gene,默认是 Non-Functional
-- 注意:随机抽很可能抽中真实的 Functional MTI,需要排除已知阳性
-- 风险高但天花板高
-
-### F. 序列嵌入(预训练模型)
-- 用 RNA-FM / RNABERT / DNA-BERT 给 miRNA、gene 生成嵌入向量
-- 拼到当前 GBDT 特征里
-- 工程量大(GPU、模型权重),但 SOTA 路线
-
-## 参考调用
-
-```python
-# 在新流水线里调 k-mer
-from src.features.kmer_features import compute_kmer_features
-kmer_train, kmer_test = compute_kmer_features(bundle.train, bundle.test, mirna_k=3, gene_k=3)
-
-# 多 seed 平均直接 python -m src.run_multiseed,改 SEEDS 列表即可
+test_dataset.csv (gene, miRNA) ──┐
+gene_seq.csv                     ──┤── merge → test_merged
+mirna_seq.csv                    ──┘
 ```
 
-## Python 环境
+**处理步骤**：
+1. 读取 CSV 文件，统一列名（`label` → `gene`，`mirna` → `miRNA`）
+2. 序列清洗：去除换行符、引号、空白字符，统一大写
+3. 标签映射：`"Functional MTI"` → 1，`"Non-Functional MTI"` → 0
+4. 列名统一：`label` → `results`
+5. Left-join 关联序列，统计命中率（当前 100%）
+
+### `src/features/basic_features.py` — 基础序列特征
+
+对每条 (gene, miRNA) 对计算：
+
+| 特征 | 维度 | 说明 |
+|------|------|------|
+| gene_length | 1 | gene 序列长度 |
+| mirna_length | 1 | miRNA 序列长度 |
+| gene_{A,C,G,T}_ratio | 4 | gene 各碱基占比 |
+| mirna_{A,C,G,U}_ratio | 4 | miRNA 各碱基占比 |
+| gene_gc | 1 | gene GC 含量 |
+| mirna_gc | 1 | miRNA GC 含量 |
+| length_ratio | 1 | gene 长度 / miRNA 长度 |
+
+**原理**：GC 含量影响序列互补配对的结合强度与热力学稳定性，是 miRNA-target 相互作用的基础物理化学特征。
+
+### `src/features/sequence_match_features.py` — 序列配对特征
+
+围绕 miRNA **seed 区**（第 2-8 位碱基，这是 miRNA 识别靶基因的核心区域）进行字符串匹配：
+
+| 特征 | 说明 |
+|------|------|
+| seed_in_gene | seed 区是否出现在 gene 序列中（正向） |
+| seed_revcomp_in_gene | seed 区反向互补是否出现在 gene 序列中 |
+| mirna_in_gene | 完整 miRNA 序列是否出现在 gene 中 |
+| mirna_revcomp_in_gene | 完整 miRNA 反向互补是否出现在 gene 中 |
+| seed_occurrence_count | seed 区在 gene 中出现的次数 |
+| seed_max_consecutive | seed 区与 gene 窗口的最长连续匹配碱基数 |
+| mirna_max_consecutive | 完整 miRNA 与 gene 窗口的最长连续匹配 |
+| seed_gc | seed 区 GC 含量 |
+| seed_A_count / seed_U_count | seed 区 A/U 计数 |
+
+> `gene_N_ratio` ~~gene 序列中未知碱基 (N) 的比例~~ — **已注释掉**。原始数据经赛题官方清洗后不含未知碱基 N，该特征恒为 0，无预测价值。详见提交记录。
+
+**原理**：miRNA 通过 seed 区与靶 mRNA 的 3'UTR 互补配对实现调控。seed 区的出现方式、连续匹配程度和互补方向是决定是否存在功能性 MTI 的关键信号。
+
+反向互补计算使用标准碱基配对规则：A↔U、C↔G、G↔C、U↔A、T↔A。
+
+### `src/models/train_ensemble.py` — 模型训练
+
+通过 `MODEL_REGISTRY` 注册表统一管理，CLI 任意组合切换。
+
+**模型选择**：
+
+| 模型 | key | 类型 | 需 scaling | 需 eval_set |
+|------|-----|------|:----------:|:-----------:|
+| LightGBM 4.6.0 | `lgbm` | 梯度提升决策树 (GBDT) | ✗ | ✓ |
+| XGBoost 3.2.0 | `xgb` | 梯度提升决策树 (GBDT) | ✗ | ✓ |
+| SVM-RBF | `svm` | 支持向量机 (RBF 核) | ✓ | ✗ |
+| Random Forest | `rf` | 随机森林 | ✗ | ✗ |
+| Extra-Trees | `extratrees` | 极端随机树 | ✗ | ✗ |
+| Factorization Machine | `fm` | 因子分解机 (自实现 numpy+SGD) | ✓ | ✗ |
+
+> 需 scaling 的模型 (SVM, FM) 会自动在每折内做 `StandardScaler` 处理，`ScaledModel` 包装后保存。
+
+**训练流程**：
+
+1. **5 折分层交叉验证** (`StratifiedKFold`)：保证每折正负样本比例一致
+2. 每折遍历 `--models` 指定的模型列表，从注册表获取工厂函数创建模型
+3. 验证集概率存入 OOF (Out-of-Fold) 数组
+4. 在 OOF 上搜索最优阈值（0.1 ~ 0.9，101 步），最大化 F1
+5. 支持 stacking 集成：Logistic Regression 元学习器组合多模型 OOF 概率
+
+**超参选择（树模型默认，小数据集防过拟合）**：
+- `learning_rate=0.01`：小学习率提高泛化能力
+- `max_depth=6`：限制树深度
+- `subsample=0.8, colsample_bytree=0.8`：行/列采样增加模型多样性
+- `reg_alpha=0.1, reg_lambda=0.1`：L1/L2 正则化
+- `early_stopping_round=100`：验证集 loss 不降则提前停止
+
+### `src/models/predict.py` — 推理与提交
+
+1. K 折模型分别对测试集预测概率
+2. 取 K 折平均 → 更鲁棒的预测
+3. 用最优阈值二值化 → 0/1 标签
+4. 按 `submit_example.csv` 格式写出提交文件
+
+支持任意模型的单模型提交和 ensemble 提交（stacking / mean 平均），通过 CLI 的 `--models` 参数动态切换。
+
+### `src/models/validate_groups.py` — 泄漏检查
+
+用 `GroupKFold` 分别按 gene、miRNA、gene+miRNA 对分组做交叉验证。如果分组得分显著低于分层 CV，说明模型在记忆实体身份而非学习真实配对模式
+
+### `src/features/kmer_features.py` — k-mer 频率特征
+
+对 gene (ACGT) 和 miRNA (ACGU) 分别统计 k-mer 归一化频率（k=2,3），产生 160 列带 `kmer__` 前缀的特征。无外部依赖。
+
+### `src/features/alignment_features.py` — 生物信息学比对特征
+
+使用 Biopython 计算每对序列的 Smith-Waterman (local) 和 Needleman-Wunsch (global) 比对得分及归一化版本，共 7 列带 `align__` 前缀的特征。需 `pip install biopython`。
+
+### `src/features/rna_energy_features.py` — RNA 热力学 MFE 特征
+
+使用 ViennaRNA 计算 miRNA MFE、duplex 结合能、候选窗口数量等热力学特征，共 7 列带 `rna__` 前缀的特征。需 `pip install viennarna` 或安装 ViennaRNA 命令行工具，启用时后台不可用则直接报错。
+
+### `src/models/hard_negative.py` — 二阶段难负样本挖掘
+
+Stage-1 正常 CV 训练，用 OOF 概率从真实负样本中选出预测概率偏高的 "hard negatives"；Stage-2 在"全部正样本 + hard negatives"上训练，并将 Stage-1 OOF 作为 meta-feature 注入。推理时两阶段串联输出。
+
+### `src/features/position_features.py` — 3' 端位置加权特征
+
+基于 miRNA 倾向于结合在 mRNA 3'UTR 的生物学先验，对 seed 匹配加入位置偏置，共 8 列带 `position__` 前缀的特征。计算 seed 匹配位置（3' 端归一化距离）、加权匹配计数、3' 区域标志。无外部依赖。
+
+### `src/features/seed_type_features.py` — miRNA seed 类型特征 + GU wobble 配对特征
+
+miRNA 靶点预测领域最权威的生物学分类信号（Bartel 2009）：根据 seed 区反向互补与 gene 的匹配程度，将每个配对归类为以下四种 canonical seed 类型之一：
+
+| 类型 | 定义 | 强度 |
+|------|------|:----:|
+| 8mer | seed(2-8) RC 匹配 + gene 对应位置有 A | 最强 |
+| 7mer-m8 | seed(2-8) RC 匹配 | 强 |
+| 7mer-A1 | seed(2-7) RC 匹配 + gene 对应位置有 A | 中 |
+| 6mer | seed(2-7) RC 匹配 | 弱 |
+
+输出 6 列 canonical seed 特征：四个二值标志位、最佳类型有序编码（0-4）、是否为任意 canonical 类型。
+
+另包含 **GU wobble 配对特征**（4 列）：GU wobble 是 RNA 中第三种碱基配对（G:U 和 U:G），弱于 Watson-Crick 但有生物功能。对 seed 区（2-8位）扫描 gene 所有等长窗口，统计最佳窗口中的 wobble 配对数、比例、Watson-Crick+wobble 总数、是否存在 wobble 对。
+
+共 10 列 `seed_type__*` 特征，无外部依赖。
+
+### `src/features/embedding_features.py` — k-mer 统计嵌入特征
+
+非神经网络的"词嵌入"等价物：用 **3-mer 共现计数 → PPMI → TruncatedSVD** 把序列 token 映射到低维稠密向量（默认 12 维）。
+
+- token 来源：miRNA 全长、miRNA seed 区、gene _best_seed_window 局部窗口
+- 共现窗口半径可调（`--embedding-context-radius`）
+- 在**训练集**上拟合 embedding 基座，**投影**到测试集（避免泄漏）
+- 输出 miRNA seed embedding、gene window embedding、两者绝对差、余弦相似度、点积、L2 距离，共 39 列 `embed__*` 特征
+- 无外部依赖，仅需 numpy + sklearn（已由基础依赖提供）
+
+### `src/features/build_features.py` — 特征块注册与统一拼装
+
+根据 `--feature-blocks` 参数懒加载对应的特征计算函数，拼接 train/test 特征表，去重列名并对齐测试集列到训练集。支持通过 `block_kwargs` 传递参数给特征函数。
+
+### `src/models/hyperopt.py` — Optuna 超参数搜索
+
+通过 `OBJECTIVE_REGISTRY` 按模型名查找 objective 函数，支持任意注册模型的超参搜索。
+在 20% holdout 上评估，搜索空间覆盖树结构（深度、叶子数）、正则化（L1/L2）、采样率（行/列）和训练步数。需 `pip install optuna`。
+
+### `src/models/train_ensemble.py` — MODEL_REGISTRY 模型注册与训练
+
+通过 `MODEL_REGISTRY` 注册表统一管理所有模型（LGBM、XGBoost、SVM、RF、Extra-Trees、FM），支持：
+- **特征选择**：CV 折内训练 light LGBM 选择器，按重要性筛选 top_n 特征，避免泄漏
+- **Stacking 集成**：Logistic Regression 作为元学习器，组合多模型 OOF 概率
+- **阈值搜索**：OOF 上搜索最优阈值（0.1 ~ 0.9，101 步），最大化 F1
+
+### `src/models/factorization_machine.py` — 因子分解机
+
+numpy + SGD 自实现的 FM 二分类器，使用 O(kn) 交互项分解技巧。
+- 超参：n_factors=8, learning_rate=0.001, epochs=500
+- 全局梯度裁剪防发散，float64 防溢出
+- 需 `--models fm` 启用，自动应用 StandardScaler
+
+### `src/run_pipeline.py` — 可配置流水线入口
+
+通过 `argparse` 提供完整的 CLI 控制，支持特征块选择、模型组合、训练策略切换。默认零参数运行等效于原 baseline：
 
 ```bash
-python -m venv .venv
-
-# Windows bash
-source .venv/Scripts/activate
-# Windows PowerShell
-.\.venv\Scripts\Activate.ps1
-
-pip install -r requirements.txt
-deactivate
+python -m src.run_pipeline
+# 等价于
+python -m src.run_pipeline --feature-blocks basic,match --models lgbm,xgb --threshold-search on
 ```
 
-## 提交格式
+**完整 CLI 参数**：
 
-`submission.csv` 字段:`gene, miRNA, results`(其中 `results ∈ {0, 1}`,1 表示 Functional MTI)。
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--feature-blocks` | `basic,match` | 特征块：basic, match, kmer, alignment, rna_energy, position, rna_accessibility, embedding, seed_type |
+| `--models` | `lgbm,xgb` | 模型：lgbm, xgb, svm, rf, extratrees, fm（任意组合逗号分隔） |
+| `--run-tag` | — | 实验标签，用于隔离输出文件 |
+| `--threshold-search` | `on` | OOF 最优阈值搜索 |
+| `--second-stage` | `none` | 二阶段策略：hard_negative |
+| `--hard-negative-threshold` | `0.8` | hard-negative 概率阈值 |
+| `--hard-negative-top-fraction` | — | 以 top fraction 选 hard negatives（覆盖阈值） |
+| `--missing-external-policy` | `error` | 外部工具缺失行为：error（报错）/ skip（跳过） |
+| `--ensemble-mode` | `mean` | 集成方式：mean（概率平均）/ stacking（LR 元学习器） |
+| `--feature-selection` | `none` | CV 折内特征选择：none / top_n |
+| `--feature-top-n` | `50` | 特征选择保留的特征数 |
+| `--feature-selection-threshold` | `median` | select_from_model 的阈值（备选策略） |
+| `--hyperopt` | `none` | 超参数搜索：none / optuna |
+| `--hyperopt-trials` | `50` | Optuna 每模型搜索 trial 数 |
+| `--seed` | `42` | 覆盖全局随机种子（默认使用 config.SEED=42） |
+| `--scale-pos-weight` | — | 树模型正样本损失权重，缓解类别不平衡（如 55 等价于 pos55） |
+| `--embedding-k` | `3` | k-mer 大小（embedding tokenization） |
+| `--embedding-dim` | `12` | 3-mer 共现 SVD 降维后的 embedding 维度 |
+| `--embedding-context-radius` | `2` | 共现计数上下文窗口半径 |
+| `--embedding-min-count` | `2` | 3-mer 最小出现次数（低于此值的 token 被忽略） |
+
+流水线串联：
+
+```
+加载数据 → 构建特征 → [二阶段训练] → 阈值搜索 → 生成提交
+```
+
+---
+
+## 实验结果
+
+数据集：738 训练样本，185 测试样本
+
+### basic+match（23 特征）
+
+| 模型 | 5 折 CV F1 (0.5 阈值) | OOF 最优 F1 | 最优阈值 |
+|------|----------------------|:-----------:|:--------:|
+| LightGBM | 0.8271 | 0.8305 | 0.452 |
+| XGBoost | 0.8248 | 0.8316 | 0.388 |
+| SVM (RBF) | — | 0.8255 | 0.540 |
+| Random Forest | — | 0.8318 | 0.436 |
+| **Extra-Trees** | — | **0.8364** | 0.516 |
+| FM | — | 0.8158 | 0.100 |
+| Ensemble (概率平均) | — | 0.8299 | 0.460 |
+
+### basic+match+kmer（183 特征）
+
+| 模型 | OOF 最优 F1 | 最优阈值 |
+|------|:-----------:|:--------:|
+| LightGBM | 0.8361 | 0.484 |
+| XGBoost | 0.8346 | 0.476 |
+| Ensemble | 0.8362 | 0.484 |
+
+### basic+match+kmer+rna_energy（190 特征）
+
+| 模型 | OOF 最优 F1 | 最优阈值 |
+|------|:-----------:|:--------:|
+| LightGBM | 0.8311 | 0.484 |
+| XGBoost | 0.8310 | 0.500 |
+| SVM (RBF) | 0.8337 | 0.436 |
+| Random Forest | 0.8328 | 0.532 |
+| Extra-Trees | 0.8305 | 0.492 |
+| FM | 0.7521 | 0.100 |
+
+### 全特征（basic+match+kmer+alignment+rna_energy，197 特征）
+
+| 模型 | OOF 最优 F1 | 最优阈值 |
+|------|:-----------:|:--------:|
+| LightGBM | 0.8332 | 0.468 |
+| XGBoost | 0.8311 | 0.460 |
+| Ensemble | 0.8310 | 0.476 |
+
+### basic+match+kmer+rna_energy+seed_type（196 特征）
+
+| 模型 | OOF 最优 F1 | 最优阈值 |
+|------|:-----------:|:--------:|
+| LightGBM | 0.8321 | 0.460 |
+| XGBoost | 0.8285 | 0.460 |
+| SVM (RBF) | 0.8342 | 0.444 |
+| Random Forest | 0.8332 | 0.460 |
+| Extra-Trees | 0.8299 | 0.260 |
+| FM | 0.7509 | 0.100 |
+| **Stacking (全6模型)** | **0.8377** | 0.524 |
+| Stacking (不含FM) | 0.8366 | 0.508 |
+
+### basic+match+kmer+rna_energy+seed_type+wobble（200 特征）
+
+| 模型组合 | OOF 最优 F1 |
+|---------|:-----------:|
+| Stacking (全6模型) | 0.8370 |
+
+### Stacking 集成结果（历史汇总）
+
+| 特征 | 模型组合 | OOF 最优 F1 |
+|------|---------|:-----------:|
+| basic+match+kmer+rna_energy+**seed_type** | lgbm,xgb,svm,rf,extratrees,fm | **0.8377** |
+| basic+match+kmer+rna_energy | lgbm,xgb,svm,rf,extratrees,fm | 0.8371 |
+| basic+match+kmer+rna_energy | lgbm,xgb,svm,rf,extratrees | 0.8361 |
+| 全部特征 (202维) | lgbm,xgb,svm,rf,extratrees,fm | 0.8351 |
+
+### 泄漏检查结果
+
+| 分组依据 | 5 折 CV F1 | vs 分层 CV 差异 |
+|----------|-----------|----------------|
+| 分层 (无分组) | 0.8250 | — |
+| gene | 0.8202 | -0.005 |
+| miRNA | 0.8223 | -0.003 |
+| gene+miRNA | 0.8217 | -0.003 |
+
+分组得分与分层 CV 基本一致，无显著实体泄漏
+
+---
+
+## 常用命令
+
+```bash
+# 运行基线流水线（默认 23 特征）
+python -m src.run_pipeline
+
+# 启用 k-mer 频率特征（183 特征）
+python -m src.run_pipeline --feature-blocks basic,match,kmer
+
+# 启用比对特征（需 biopython）
+python -m src.run_pipeline --feature-blocks basic,match,alignment
+
+# 启用 RNA 热力学特征（需 viennarna）
+python -m src.run_pipeline --feature-blocks basic,match,rna_energy
+
+# 全部特征（197 特征）
+python -m src.run_pipeline --feature-blocks basic,match,kmer,alignment,rna_energy
+
+# 单模型（仅 XGBoost）
+python -m src.run_pipeline --models xgb
+
+# 二阶段 hard-negative 挖掘
+python -m src.run_pipeline --feature-blocks basic,match,kmer --second-stage hard_negative
+
+# 特征选择 + Stacking 集成
+python -m src.run_pipeline --feature-blocks basic,match,kmer --feature-selection top_n --feature-top-n 80 --ensemble-mode stacking
+
+# Optuna 超参数搜索
+python -m src.run_pipeline --feature-blocks basic,match,kmer --hyperopt optuna --hyperopt-trials 100
+
+# 启用 3' 端位置加权特征（31 特征）
+python -m src.run_pipeline --feature-blocks basic,match,position
+
+# 启用 seed 类型特征（6 特征，无外部依赖）
+python -m src.run_pipeline --feature-blocks basic,match,seed_type
+
+# seed 类型 + kmer + rna_energy + stacking（当前 OOF 最强组合，F1=0.8377）
+python -m src.run_pipeline --feature-blocks basic,match,kmer,rna_energy,seed_type --models lgbm,xgb,svm,rf,extratrees,fm --ensemble-mode stacking --missing-external-policy skip
+
+# 使用不同随机种子复现实验
+python -m src.run_pipeline --feature-blocks basic,match,kmer,rna_energy,seed_type --models lgbm,xgb,svm,rf,extratrees,fm --ensemble-mode stacking --missing-external-policy skip --seed 0
+
+# 启用 k-mer 统计嵌入特征（~39 特征）
+python -m src.run_pipeline --feature-blocks basic,match,embedding
+
+# 位置 + 嵌入 + k-mer 联合（~382 特征）
+python -m src.run_pipeline --feature-blocks basic,match,position,embedding,kmer
+
+# 定制 embedding 参数（8 维、更大上下文窗口）
+python -m src.run_pipeline --feature-blocks basic,match,embedding --embedding-dim 8 --embedding-context-radius 4
+
+# 启用靶点可及性特征（34 特征，需 viennarna）
+python -m src.run_pipeline --feature-blocks basic,match,rna_accessibility
+
+# 全部特征（202 特征）
+python -m src.run_pipeline --feature-blocks basic,match,position,kmer,rna_accessibility
+
+# 实验运行（带 run-tag，避免覆盖 baseline 产物）
+python -m src.run_pipeline --feature-blocks basic,match,kmer --run-tag kmer_exp
+
+# 单模型 SVM
+python -m src.run_pipeline --models svm
+
+# 单模型 Extra-Trees（6 个模型中单模型最优）
+python -m src.run_pipeline --models extratrees
+
+# 多模型 stacking 集成（最佳策略）
+python -m src.run_pipeline --models lgbm,xgb,svm,rf,extratrees,fm --feature-blocks basic,match,kmer,rna_energy --ensemble-mode stacking
+
+# 5 模型 stacking（不含 FM）
+python -m src.run_pipeline --models lgbm,xgb,svm,rf,extratrees --feature-blocks basic,match,kmer,rna_energy --ensemble-mode stacking
+
+# 仅测试数据加载
+python -m src.data
+
+# 运行泄漏检查
+python -m src.models.validate_groups
+
+# 查看数据统计
+python -c "from src.data.load_data import build_dataset_bundle; b = build_dataset_bundle(); print(b.train.describe())"
+```
+
+---
+
+## 依赖
+
+### 核心依赖（必装）
+
+```
+pandas>=2.2.0
+numpy>=1.26.0
+scikit-learn>=1.5.0
+lightgbm>=4.5.0
+xgboost>=2.1.0
+pyarrow>=17.0.0
+joblib>=1.4.0
+```
+
+### 可选依赖（按需安装）
+
+| 依赖 | 用途 | 安装命令 |
+|------|------|----------|
+| `biopython>=1.80` | alignment 特征块（Smith-Waterman / Needleman-Wunsch） | `pip install biopython` |
+| `viennarna>=2.6.0` | rna_energy / rna_accessibility 特征块（MFE / duplex / accessibility） | `pip install viennarna` |
+| `optuna>=4.0.0` | hyperopt optuna（贝叶斯超参数搜索） | `pip install optuna` |
+
+当 `--feature-blocks` 包含 `alignment`、`rna_energy` 或 `rna_accessibility` 但对应包未安装时，默认会报错并给出安装指引。可通过 `--missing-external-policy skip` 跳过缺失的 block。
+
+所有核心依赖均为开源库，通过 `pip install` 从 PyPI 下载预编译 wheel。Biopython 和 ViennaRNA 也提供 Windows/Linux/macOS 预编译 wheel。
+
