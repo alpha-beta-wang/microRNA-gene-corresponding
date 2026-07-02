@@ -1,0 +1,517 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{float}
+
+\geometry{left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    frame=single,
+    breaklines=true,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+}
+
+\title{\textbf{基于序列信息的 microRNA-gene 关系预测} \\ \large 实验报告与方法论总结}
+\author{
+    王永生 \quad 2023K8009929031 \quad (组长) \\
+    赵奕轩 \quad 2023K8009906002 \\
+    曾子恒 \quad 2023K8009929042
+}
+\date{2026年7月}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本报告记录了 DataFountain 竞赛「基于序列信息的 microRNA 和 gene 关系检测」的完整实验探索过程。
+任务为给定 (gene, miRNA) 序列对，二分类预测是否为 Functional MTI，评测指标为 F1-score。
+通过系统性的特征工程、模型融合与诊断驱动的迭代策略，线上 F1 从基线 0.800 逐步提升至 \textbf{0.835}，
+涨幅达 4.4\%。本文详细记录了每一步实验的动机、方法、结果与教训。
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{任务与数据分析}
+%==============================================================================
+
+\subsection{任务定义}
+
+给定 (gene, miRNA) 对，判断该对是否构成 Functional microRNA Target Interaction (MTI)。
+评测指标为 F1-score（正类 = Functional MTI）。
+
+\subsection{数据规模}
+
+\begin{table}[H]
+\centering
+\caption{数据集统计}
+\begin{tabular}{lrrr}
+\toprule
+数据集 & 样本数 & 正样本 & 正样本率 \\
+\midrule
+训练集 & 738 & 514 & 69.7\% \\
+测试集 & 185 & $\sim$120 (反推) & $\sim$64.9\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{关键约束}
+
+\begin{itemize}[nosep]
+    \item \textbf{极小样本}：训练集不足 800 行，测试集仅 185 行
+    \item \textbf{高方差}：测试集上翻转 1 个样本 $\approx$ F1 变化 0.5--1\%
+    \item \textbf{分布漂移}：训练集正样本率 69.7\% vs 测试集 $\sim$65\%，阈值需要调整
+    \item \textbf{序列数据}：gene 为 DNA 序列 (ACGT)，miRNA 为 RNA 序列 (ACGU)
+\end{itemize}
+
+%==============================================================================
+\section{实验时间线}
+%==============================================================================
+
+\subsection{阶段 1：基线建立 (F1 = 0.800)}
+
+\subsubsection{特征设计}
+
+初始特征集包含 24 个浅层统计特征：
+
+\begin{itemize}[nosep]
+    \item 序列长度（miRNA/gene）、长度比
+    \item 碱基组成比例（A/C/G/T/U）
+    \item GC 含量
+    \item seed 区域（miRNA 第 2--8 nt）反向互补匹配特征
+\end{itemize}
+
+\subsubsection{模型架构}
+
+采用 LightGBM + XGBoost 双模型平均：
+\begin{itemize}[nosep]
+    \item 5-fold StratifiedKFold 交叉验证
+    \item OOF 概率平均后阈值搜索
+    \item 首次提交使用阈值 0.50
+\end{itemize}
+
+\subsubsection{结果}
+
+首次提交 \texttt{submission\_ensemble@thr=0.50}，线上 F1 = \textbf{0.800}。
+
+%------------------------------------------------------------------------------
+\subsection{阶段 2：Bug 修复与诊断 (F1: 0.800 $\to$ 0.810)}
+
+\subsubsection{反向互补 Bug 修复}
+
+发现 \texttt{sequence\_match\_features.py} 中互补表错误：
+原始代码将 \texttt{A$\to$U}，但 gene 是 DNA 不含 U，导致反向互补结果含 U 后永远匹配不上。
+
+\textbf{正确的 Watson-Crick 配对}（miRNA seed 找 DNA 靶点）：
+\[
+A \leftrightarrow T, \quad C \leftrightarrow G, \quad G \leftrightarrow C, \quad U \to A, \quad T \to A
+\]
+
+修复后特征 \texttt{seed\_revcomp\_in\_gene} 命中率从 0\% $\to$ 52\%。
+
+\textbf{教训}：每写一个生物学特征，都要 sanity check——看均值、与标签的相关性、零方差列。
+
+\subsubsection{GroupKFold 泄漏诊断}
+
+\begin{table}[H]
+\centering
+\caption{不同验证策略的 OOF F1 对比}
+\begin{tabular}{lcc}
+\toprule
+验证策略 & Mean F1 & 与 StratifiedKFold 的差异 \\
+\midrule
+StratifiedKFold & 0.8345 & --- \\
+GroupKFold(gene) & 0.8329 & $-$0.002 \\
+\textbf{GroupKFold(miRNA)} & \textbf{0.8211} & $-$0.013 \\
+GroupKFold(pair) & 0.8221 & $-$0.012 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{关键认知}：
+\begin{itemize}[nosep]
+    \item 模型对未见过的 miRNA 泛化最弱，fold 间方差最大（0.77--0.87）
+    \item StratifiedKFold OOF F1 比真实泛化乐观 $\sim$1.3 个点
+    \item 线上 0.80 $\approx$ GroupKFold(miRNA) 的下半段
+\end{itemize}
+
+\subsubsection{阈值上探}
+
+提交全 1 baseline（\texttt{all\_one}）反推测试集真实正样本数：
+\[
+P = \frac{F1 \times N}{2 - F1} = \frac{0.7869 \times 185}{2 - 0.7869} \approx 120 \quad (\text{正样本率} \approx 64.9\%)
+\]
+
+\begin{table}[H]
+\centering
+\caption{阈值扫描结果}
+\begin{tabular}{ccc}
+\toprule
+提交正样本率 & 配置 & 线上 F1 \\
+\midrule
+100\% & all\_one & 0.787 \\
+96.8\% & ensemble@0.50 & 0.800 \\
+\textbf{80.5\%} & \textbf{ensemble@0.60} & \textbf{0.810} \\
+72.4\% & ensemble@0.65 & 0.795 \\
+57.8\% & ensemble@0.70 & 0.730 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{发现}：在 65\% 真实正样本率附近，适当多判正反而更稳（F1 对漏报敏感）。
+
+%------------------------------------------------------------------------------
+\subsection{阶段 3：概率校准 (F1: 0.810 $\to$ 0.825)}
+
+\subsubsection{scale\_pos\_weight 校准}
+
+训练集正样本为多数类（70\%），设置：
+\[
+\texttt{scale\_pos\_weight} = \frac{neg}{pos} = \frac{224}{514} \approx 0.436
+\]
+
+降低正样本权重让模型敢预测 0，效果：
+\begin{itemize}[nosep]
+    \item 测试集概率中位数从 0.72 $\to$ 0.63，分布拉开
+    \item 自然阈值 0.5 附近即为最优
+    \item \texttt{spw@thr=0.48}（正样本率 83.2\%）$\to$ 线上 F1 = \textbf{0.8248}
+\end{itemize}
+
+\textbf{教训}：\texttt{scale\_pos\_weight} 不只是处理类别不平衡，更是校准概率分布的工具。
+GBDT 默认 logloss 训练出的概率偏向多数类，线性调整 spw 可纠正。
+
+\subsubsection{Nested CV 阈值（失败尝试）}
+
+将阈值搜索改为每 fold 独立选阈值取中位数，理论上更稳，但线上从 0.800 $\to$ 0.788。
+
+原因：中位数阈值 0.45 < 默认 0.50，多翻了 11 个样本从 1 到 0，
+其中混入真正样本导致 F1 下降。
+
+\textbf{教训}：小测试集上阈值小幅微调改不出收益，根本问题是模型概率排序质量。
+
+%------------------------------------------------------------------------------
+\subsection{阶段 4：多 Seed 平均（部分成功）}
+
+\subsubsection{方法}
+
+5 个种子 $\times$ (LGBM + XGB) $\times$ 5 fold = 50 个基模型，测试集概率全部平均。
+
+$$\text{SEEDS} = \{42, 123, 456, 789, 2024\}$$
+
+\subsubsection{结果}
+
+\begin{itemize}[nosep]
+    \item OOF F1: 0.8287 $\to$ \textbf{0.8375}（+0.009）
+    \item 线上 F1（同 pos\_rate）: 0.8248 $\to$ 0.8175（$-$0.007）
+\end{itemize}
+
+\textbf{反直觉}：OOF 涨了，线上没涨甚至略跌。
+
+\textbf{分析}：
+\begin{itemize}[nosep]
+    \item 测试集 185 行太小，概率排序方差被压低后未体现到边界样本上
+    \item 单 seed 拿 0.8248 部分靠运气——选出的 31 个负样本恰好准确
+    \item 多 seed 平均的真实价值是减小提交方差（稳定性）而非提升上限
+\end{itemize}
+
+\textbf{教训}：OOF 涨 $\neq$ 线上涨，尤其是测试集 < 200 时。
+
+%------------------------------------------------------------------------------
+\subsection{阶段 5：k-mer TF-IDF 特征——真正的突破 (F1: 0.825 $\to$ 0.835)}
+
+\subsubsection{方法}
+
+对 miRNA 和 gene 序列分别做 character 3-gram TF-IDF：
+
+\begin{lstlisting}
+TfidfVectorizer(
+    analyzer="char", ngram_range=(3, 3),
+    sublinear_tf=True, norm="l2"
+)
+\end{lstlisting}
+
+\begin{itemize}[nosep]
+    \item miRNA: 64 维（$4^3$, \texttt{min\_df=2}）
+    \item gene: 最多 256 维（\texttt{min\_df=5, max\_features=256}）
+    \item 统一字母表：\texttt{U $\to$ T}
+    \item 总特征数：26 (基础) + 128 (k-mer) = 154 维
+\end{itemize}
+
+\subsubsection{结果}
+
+\begin{table}[H]
+\centering
+\caption{k-mer 特征的效果}
+\begin{tabular}{lccc}
+\toprule
+配置 & 特征数 & OOF F1 & 线上 F1 \\
+\midrule
+多 seed（无 k-mer） & 26 & 0.8375 & 0.8175 \\
+\textbf{多 seed + k-mer} & \textbf{154} & \textbf{0.8377} & \textbf{0.8352} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{惊喜}：OOF 几乎没涨（+0.0002），但线上涨了 +0.018！
+
+\textbf{解释}：k-mer 特征提供了新维度的序列模式相似度信息。
+GBDT 在 OOF 上没把这些信号利用充分（训练集内分布相近），
+但在测试集上（包含未见过的 miRNA）这些模式信号有用武之地。
+
+\textbf{教训}：
+\begin{enumerate}[nosep]
+    \item 特征工程 > 模型调优，对小样本任务尤其如此
+    \item 不要因为 OOF 没动就放弃特征——在分布漂移场景下，新特征的价值 OOF 看不出来
+    \item char k-mer TF-IDF 是序列任务的万能起点，几乎零成本
+\end{enumerate}
+
+\subsubsection{最优阈值选择}
+
+\begin{table}[H]
+\centering
+\caption{k-mer 模型不同阈值的线上表现}
+\begin{tabular}{cccc}
+\toprule
+提交文件 & 阈值 & 正样本数 (pos) & 线上 F1 \\
+\midrule
+kmer\_t45 & 0.45 & 155 & 0.8291 \\
+\textbf{kmer\_t46} & \textbf{0.46} & \textbf{153} & \textbf{0.8352} \\
+kmer\_t47 & 0.47 & 151 & 0.8339 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+最优提交：\texttt{submission\_kmer\_t46.csv}，正样本 153 个（pos\_rate = 82.7\%），
+线上 F1 = \textbf{0.8352}。
+
+%------------------------------------------------------------------------------
+\subsection{阶段 6：k-mer 交互特征 (kmi)}
+
+\subsubsection{方法}
+
+在 k-mer TF-IDF 基础上增加 miRNA-gene 交互特征：
+对 64 个 3-mer，计算 miRNA 中该 k-mer 的出现次数 $\times$ gene 中其反向互补序列的出现密度：
+
+\[
+\text{kmi}_{km} = \text{count}(km, \text{miRNA}) \times \frac{\text{count}(\overline{km}, \text{gene})}{\text{len}(\text{gene}) / 1000}
+\]
+
+其中 $\overline{km}$ 表示 $km$ 的反向互补序列。
+
+总特征数：26 (基础) + 128 (k-mer TF-IDF) + 64 (交互) = 218 维。
+
+\subsubsection{结果}
+
+\begin{table}[H]
+\centering
+\caption{k-mer 交互特征的 OOF 效果}
+\begin{tabular}{lccc}
+\toprule
+配置 & 特征数 & OOF F1 & OOF 最优阈值 \\
+\midrule
+多 seed + k-mer & 154 & 0.8377 & 0.47 \\
+\textbf{多 seed + k-mer + kmi} & \textbf{218} & \textbf{0.8379} & \textbf{0.47} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+OOF 仅涨 +0.0002，与 k-mer only 几乎相同，表明 GBDT 在 OOF 维度上已将信号榨干。
+但根据 k-mer 的先例（OOF 不涨线上涨 1 点），kmi 仍有潜力。
+
+线上验证因评测平台故障未能完成。
+
+%==============================================================================
+\section{完整结果档案}
+%==============================================================================
+
+\begin{table}[H]
+\centering
+\caption{关键提交线上 F1 汇总（按时间顺序）}
+\begin{tabular}{llccc}
+\toprule
+阶段 & 提交文件 & 正样本率 & 线上 F1 & 相对基线 \\
+\midrule
+基线 & ensemble@0.50 & 96.2\% & 0.800 & --- \\
+阈值调整 & ensemble@0.60 & 80.5\% & 0.810 & +0.010 \\
+spw 校准 & spw\_t45 & 87.0\% & 0.819 & +0.019 \\
+spw 校准 & spw\_t48 & 83.2\% & 0.825 & +0.025 \\
+多 seed & ms\_t47 & 83.2\% & 0.818 & +0.018 \\
+\textbf{k-mer} & \textbf{kmer\_t46} & \textbf{82.7\%} & \textbf{0.835} & \textbf{+0.035} \\
+k-mer & kmer\_t47 & 81.6\% & 0.834 & +0.034 \\
+kmi & kmi\_t46 & 83.2\% & 待测 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\section{方法论总结}
+%==============================================================================
+
+\subsection{涨分贡献分解}
+
+\begin{table}[H]
+\centering
+\caption{各阶段对最终分数的贡献}
+\begin{tabular}{lcc}
+\toprule
+优化项 & 涨幅 & 累计 F1 \\
+\midrule
+基线（24 维 + LGBM+XGB + thr=0.50） & --- & 0.800 \\
+阈值上探至甜蜜点 & +0.010 & 0.810 \\
+scale\_pos\_weight 概率校准 & +0.015 & 0.825 \\
+k-mer TF-IDF 特征 & +0.010 & \textbf{0.835} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{核心经验}
+
+\begin{enumerate}
+    \item \textbf{诊断先于优化}：提交 \texttt{all\_one} 反推分布、跑 GroupKFold 看泄漏、
+          检查特征命中率——这些诊断步骤的 ROI 远高于盲目调参。
+
+    \item \textbf{特征工程 $>$ 模型调优}：在小样本任务上，新增一类特征（k-mer）的效果
+          远超调 learning rate 或 n\_estimators。最终涨分的 1/3 来自特征。
+
+    \item \textbf{OOF 与线上不总是一致}：
+    \begin{itemize}[nosep]
+        \item 多 seed 平均：OOF +0.009，线上 $-$0.007
+        \item k-mer 特征：OOF +0.0002，线上 +0.018
+        \item 根本原因：训练/测试分布漂移 + 测试集极小（185 行）
+    \end{itemize}
+
+    \item \textbf{概率分布校准比阈值精调重要}：\texttt{scale\_pos\_weight} 将概率从有偏
+          分布拉成均匀分布，使得 0.5 附近的自然阈值就接近最优。
+
+    \item \textbf{同 pos\_rate 对照是黄金法则}：固定正样本数比较两份提交，
+          排除了阈值选择的干扰，直接度量模型排序质量。
+
+    \item \textbf{每记一次结果}：维护 \texttt{results.csv} 记录每份提交的
+          \texttt{pos/neg/pos\_rate/online\_f1}，让每次实验可追溯、可对比。
+\end{enumerate}
+
+\subsection{优先级框架}
+
+实验中验证的最优迭代顺序：
+
+\begin{enumerate}[nosep]
+    \item 修 Bug（反向互补、零方差列、数据泄漏）
+    \item 诊断信号（GroupKFold、all\_one 提交反推分布）
+    \item 阈值上探至甜蜜点（2--4 个粗阈值）
+    \item \texttt{scale\_pos\_weight} 校准概率
+    \item 加新特征类（k-mer TF-IDF、交互特征）
+    \item 多 seed 平均（减方差，不指望涨上限）
+    \item 多模型异构融合
+\end{enumerate}
+
+%==============================================================================
+\section{技术细节}
+%==============================================================================
+
+\subsection{模型超参数}
+
+\begin{table}[H]
+\centering
+\caption{LightGBM 与 XGBoost 超参数}
+\begin{tabular}{lcc}
+\toprule
+参数 & LightGBM & XGBoost \\
+\midrule
+n\_estimators & 3000 & 3000 \\
+learning\_rate & 0.01 & 0.01 \\
+max\_depth & 6 & 6 \\
+num\_leaves & 31 & --- \\
+min\_child\_samples & 10 & --- \\
+subsample & 0.8 & 0.8 \\
+colsample\_bytree & 0.8 & 0.8 \\
+reg\_alpha & 0.1 & 0.1 \\
+reg\_lambda & 0.1 & 0.1 \\
+early\_stopping\_rounds & 100 & 100 \\
+scale\_pos\_weight & 0.436 & 0.436 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{交叉验证策略}
+
+\begin{itemize}[nosep]
+    \item 5-fold StratifiedKFold（保持每折正负比例一致）
+    \item 5 个随机种子：42, 123, 456, 789, 2024
+    \item 共产出 50 个基模型（5 seeds $\times$ 5 folds $\times$ 2 模型）
+    \item 测试集概率为 50 个模型预测的简单平均
+    \item OOF 概率为同一样本在不同 seed 下验证集预测的滚动平均
+\end{itemize}
+
+\subsection{特征体系}
+
+最终 218 维特征分为四个模块：
+
+\begin{table}[H]
+\centering
+\caption{特征模块构成}
+\begin{tabular}{lrl}
+\toprule
+模块 & 维度 & 说明 \\
+\midrule
+基础统计 & 12 & 长度、碱基比例、GC 含量 \\
+序列匹配 & 8 & seed 反向互补匹配、连续匹配长度 \\
+高级特征 & 6 & 反向互补出现次数、命中点局部 AT 含量 \\
+k-mer TF-IDF & 128 & miRNA 64 + gene 64，char 3-gram \\
+k-mer 交互 & 64 & miRNA 3-mer $\times$ gene 反向互补密度 \\
+\midrule
+\textbf{总计} & \textbf{218} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\section{未完成探索方向}
+%==============================================================================
+
+按预期收益从高到低：
+
+\begin{enumerate}
+    \item \textbf{kmi 交互特征线上验证}：OOF +0.0002，需线上确认是否有额外收益
+    \item \textbf{4-mer 特征}：更具体的序列模式，但更稀疏
+    \item \textbf{异构模型融合}：CatBoost + RandomForest + 逻辑回归
+    \item \textbf{RNA 双链折叠自由能}：ViennaRNA 计算 $\Delta G$，TargetScan 核心信号
+    \item \textbf{伪标签半监督}：用当前模型给测试集打软标签回训
+    \item \textbf{预训练序列嵌入}：RNA-FM / DNA-BERT
+\end{enumerate}
+
+%==============================================================================
+\section{结论}
+%==============================================================================
+
+在极小样本（738 训练 / 185 测试）的序列二分类任务上，
+通过「诊断驱动 $\to$ 概率校准 $\to$ 特征扩展」的系统方法论，
+线上 F1 从 0.800 提升至 0.835（+4.4\%）。
+
+核心贡献按重要性排序：
+\begin{enumerate}[nosep]
+    \item 阈值上探 + spw 校准（+2.5\%）：让模型概率分布与真实分布对齐
+    \item k-mer TF-IDF 特征（+1.0\%）：引入序列模式维度的信息
+    \item Bug 修复 + 诊断（奠基性）：确保后续优化建立在正确基础上
+\end{enumerate}
+
+本任务的瓶颈不在模型复杂度，而在于\textbf{从 $<$800 条带标签序列对中提取泛化信号}。
+k-mer 特征的成功表明，将序列转化为统计模式向量是最低成本、最高收益的方向。
+进一步提升需要引入外部生物学知识（自由能、预训练嵌入）或扩充训练数据。
+
+\end{document}

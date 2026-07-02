@@ -13,6 +13,7 @@ from src.data.load_data import build_dataset_bundle
 from src.features.advanced_features import compute_advanced_features
 from src.features.basic_features import compute_sequence_features
 from src.features.kmer_features import compute_kmer_features
+from src.features.kmer_interaction_features import compute_kmer_interaction_features
 from src.features.sequence_match_features import compute_match_features
 
 SEEDS = [42, 123, 456, 789, 2024]
@@ -57,10 +58,12 @@ def main():
     test_X = test_X[train_X.columns]
 
     kmer_train, kmer_test = compute_kmer_features(bundle.train, bundle.test)
-    train_X = pd.concat([train_X, kmer_train], axis=1)
-    test_X = pd.concat([test_X, kmer_test], axis=1)
+    kmi_train = compute_kmer_interaction_features(bundle.train)
+    kmi_test  = compute_kmer_interaction_features(bundle.test)
+    train_X = pd.concat([train_X, kmer_train, kmi_train], axis=1)
+    test_X  = pd.concat([test_X,  kmer_test,  kmi_test],  axis=1)
     test_X = test_X[train_X.columns]
-    print(f"  base+kmer features: base=26 mirna_kmer={kmer_train.shape[1] - len([c for c in kmer_train.columns if c.startswith('gene_kmer')])} total={train_X.shape[1]}")
+    print(f"  base+kmer+kmi features: base=26 kmer={kmer_train.shape[1]} kmi={kmi_train.shape[1]} total={train_X.shape[1]}")
     y = bundle.train[TARGET_COLUMN].copy()
     pos = int(y.sum()); neg = int((1 - y).sum())
     spw = neg / pos
@@ -123,14 +126,14 @@ def main():
         sub = test_meta.copy()
         sub[TARGET_COLUMN] = (test_proba >= t).astype(int)
         sub = sub[list(template.columns)]
-        name = f"submission_kmer_t{int(round(t*100))}.csv"
+        name = f"submission_kmi_t{int(round(t*100))}.csv"
         sub.to_csv(SUBMISSION_DIR / name, index=False)
         pp = int((sub[TARGET_COLUMN] == 1).sum())
         print(f"{name}: pos={pp} neg={len(sub)-pp} pos_rate={pp/len(sub):.3f}")
 
     OOF_DIR.mkdir(parents=True, exist_ok=True)
-    pd.Series(test_proba, name="test_proba").to_csv(OOF_DIR / "test_proba_kmer.csv", index=True, header=True)
-    pd.Series(oof_proba, name="oof_proba").to_csv(OOF_DIR / "oof_kmer.csv", index=True, header=True)
+    pd.Series(test_proba, name="test_proba").to_csv(OOF_DIR / "test_proba_kmi.csv", index=True, header=True)
+    pd.Series(oof_proba, name="oof_proba").to_csv(OOF_DIR / "oof_kmi.csv", index=True, header=True)
 
 
 if __name__ == "__main__":
