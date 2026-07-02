@@ -1,3 +1,5 @@
+"""RNA 能量特征模块，调用 ViennaRNA 估计折叠和双链能量。"""
+
 import pandas as pd
 import RNA
 
@@ -136,3 +138,4 @@ def compute_rna_energy_features(
         ]
 
     return features
+"""RNA 能量特征模块，调用 ViennaRNA 估计折叠和双链能量。"""

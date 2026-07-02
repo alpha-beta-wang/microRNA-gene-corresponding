@@ -1,3 +1,5 @@
+"""基础序列统计特征模块，计算长度、碱基比例和 GC 等指标。"""
+
 import numpy as np
 import pandas as pd
 
@@ -25,3 +27,4 @@ def compute_sequence_features(df: pd.DataFrame) -> pd.DataFrame:
     features["length_ratio"] = features["gene_length"] / features["mirna_length"].replace(0, np.nan)
 
     return features.fillna(0)
+"""基础序列统计特征模块，计算长度、碱基比例和 GC 等指标。"""

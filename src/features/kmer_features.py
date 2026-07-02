@@ -1,3 +1,5 @@
+"""k-mer TF-IDF 特征模块，从 miRNA 和 gene 序列提取字符 n-gram 表示。"""
+
 from typing import Tuple
 
 import numpy as np
@@ -86,3 +88,4 @@ def compute_kmer_features(
         pd.concat(train_blocks, axis=1),
         pd.concat(test_blocks, axis=1),
     )
+"""k-mer TF-IDF 特征模块，从 miRNA 和 gene 序列提取字符 n-gram 表示。"""

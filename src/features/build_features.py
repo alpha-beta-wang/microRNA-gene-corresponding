@@ -1,3 +1,5 @@
+"""特征构建注册表模块，按名称解析并组合多个特征块。"""
+
 from typing import Any, Callable
 
 import pandas as pd
@@ -127,3 +129,4 @@ def build_features(
 
     print(f"  total feature columns: {len(train_features.columns)}")
     return train_features, test_features
+"""特征构建注册表模块，按名称解析并组合多个特征块。"""

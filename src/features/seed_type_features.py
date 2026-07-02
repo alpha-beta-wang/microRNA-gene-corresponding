@@ -1,21 +1,4 @@
-"""miRNA seed type classification features + GU wobble pairing features.
-
-The four canonical seed types are the strongest biological signal for
-functional miRNA-target interactions (Bartel 2009):
-
-  8mer    — seed(2-8) RC match in gene + A at position matching miRNA pos1
-  7mer-m8 — seed(2-8) RC match in gene (no A1 requirement)
-  7mer-A1 — seed(2-7) RC match in gene + A at position matching miRNA pos1
-  6mer    — seed(2-7) RC match in gene
-
-GU wobble pairs (G:U and U:G) are the third type of RNA base pair, weaker
-than Watson-Crick but biologically functional. Counted across seed-length
-windows in the gene to capture near-matches missed by exact string search.
-
-All positions are 1-indexed per convention; in Python slices:
-  seed(2-8) = m[1:8]   (7 bases)
-  seed(2-7) = m[1:7]   (6 bases)
-"""
+"""种子类型特征模块，识别 8mer、7mer、6mer 和 GU wobble 配对。"""
 
 import pandas as pd
 

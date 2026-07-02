@@ -1,3 +1,5 @@
+"""序列匹配特征模块，计算反向互补、连续匹配和命中次数。"""
+
 import pandas as pd
 
 from src.config import GENE_SEQUENCE_COLUMN, MIRNA_SEQUENCE_COLUMN
@@ -97,3 +99,4 @@ def compute_match_features(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return features.fillna(0)
+"""序列匹配特征模块，计算反向互补、连续匹配和命中次数。"""

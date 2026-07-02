@@ -1,3 +1,5 @@
+"""多随机种子实验入口，用于提升交叉验证和提交结果稳定性。"""
+
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
@@ -138,3 +140,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""多随机种子实验入口，用于提升交叉验证和提交结果稳定性。"""

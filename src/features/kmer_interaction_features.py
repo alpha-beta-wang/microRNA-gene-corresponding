@@ -1,3 +1,5 @@
+"""k-mer 交互特征模块，统计 miRNA 与 gene 反向互补 k-mer 的相互作用。"""
+
 from itertools import product
 
 import numpy as np
@@ -58,3 +60,4 @@ def compute_kmer_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
         for m, g in zip(mirna_col, gene_col)
     ])
     return pd.DataFrame(mat, index=df.index, columns=cols)
+"""k-mer 交互特征模块，统计 miRNA 与 gene 反向互补 k-mer 的相互作用。"""

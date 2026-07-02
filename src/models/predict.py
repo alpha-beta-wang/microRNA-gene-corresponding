@@ -1,3 +1,5 @@
+"""预测与提交文件生成模块。"""
+
 from typing import Any
 
 import numpy as np
@@ -41,3 +43,4 @@ def predict_and_submit(
     submission.to_csv(submission_path, index=False)
     print(f"submission saved to {submission_path} rows={len(submission)}")
     return submission
+"""预测与提交文件生成模块。"""

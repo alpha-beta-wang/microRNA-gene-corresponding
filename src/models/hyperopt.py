@@ -1,3 +1,5 @@
+"""Optuna 超参数搜索模块，提供 LightGBM 和 XGBoost 调参入口。"""
+
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
@@ -92,3 +94,4 @@ def run_optuna(
         print(f"  [optuna] {m} best_params={result[m]}")
 
     return result
+"""Optuna 超参数搜索模块，提供 LightGBM 和 XGBoost 调参入口。"""

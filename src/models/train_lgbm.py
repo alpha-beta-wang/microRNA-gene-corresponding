@@ -1,3 +1,5 @@
+"""LightGBM 训练模块，包含交叉验证、阈值优化和产物保存。"""
+
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
@@ -83,3 +85,4 @@ def save_artifacts(
         f.write(f"fold_scores={fold_scores}\n")
         f.write(f"mean_cv_f1={float(np.mean(fold_scores)):.6f}\n")
         f.write(f"best_threshold={best_threshold:.4f}\n")
+"""LightGBM 训练模块，包含交叉验证、阈值优化和产物保存。"""

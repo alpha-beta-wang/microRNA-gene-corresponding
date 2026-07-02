@@ -1,3 +1,5 @@
+"""序列比对特征模块，基于局部或全局比对度量 miRNA-gene 匹配质量。"""
+
 import pandas as pd
 from Bio.Align import PairwiseAligner
 
@@ -129,3 +131,4 @@ def compute_alignment_features(df: pd.DataFrame) -> pd.DataFrame:
     features["align__rc_local_score_norm"] = rc_local_scores_norm
 
     return features
+"""序列比对特征模块，基于局部或全局比对度量 miRNA-gene 匹配质量。"""

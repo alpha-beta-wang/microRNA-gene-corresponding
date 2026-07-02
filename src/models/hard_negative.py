@@ -1,3 +1,5 @@
+"""困难负样本挖掘模块，用于筛选高置信负样本再训练。"""
+
 import numpy as np
 import pandas as pd
 
@@ -140,3 +142,4 @@ def predict_two_stage(
         s2_cols = [cols + [meta_col] for cols in s2_cols]
 
     return _predict_with_models(s2_features, s2_models, s2_cols)
+"""困难负样本挖掘模块，用于筛选高置信负样本再训练。"""

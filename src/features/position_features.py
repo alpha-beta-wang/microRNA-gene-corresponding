@@ -1,3 +1,5 @@
+"""位置特征模块，刻画种子命中相对 gene 3' 端的位置。"""
+
 import pandas as pd
 
 from src.config import GENE_SEQUENCE_COLUMN, MIRNA_SEQUENCE_COLUMN
@@ -102,3 +104,4 @@ def compute_position_features(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return features.fillna(-1.0)
+"""位置特征模块，刻画种子命中相对 gene 3' 端的位置。"""

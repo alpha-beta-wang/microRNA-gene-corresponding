@@ -1,3 +1,5 @@
+"""数据加载与合并模块，构造训练集、测试集和序列元数据。"""
+
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -108,3 +110,4 @@ def save_merged_frames(bundle: DatasetBundle) -> None:
     FEATURE_DIR.mkdir(parents=True, exist_ok=True)
     bundle.train.to_parquet(FEATURE_DIR / "train_merged.parquet", index=False)
     bundle.test.to_parquet(FEATURE_DIR / "test_merged.parquet", index=False)
+"""数据加载与合并模块，构造训练集、测试集和序列元数据。"""

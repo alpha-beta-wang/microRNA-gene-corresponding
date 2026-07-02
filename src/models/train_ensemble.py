@@ -1,3 +1,5 @@
+"""集成模型训练模块，支持多模型、特征选择、stacking 和阈值搜索。"""
+
 from typing import Optional
 
 import numpy as np
@@ -391,3 +393,4 @@ def save_ensemble_artifacts(results: dict, run_tag: str | None = None) -> None:
             f.write(f"stacker_coef={results['stacker_coef']}\n")
         if "selected_features_per_fold" in results:
             f.write(f"n_selected_per_fold={[len(s) for s in results['selected_features_per_fold']]}\n")
+"""集成模型训练模块，支持多模型、特征选择、stacking 和阈值搜索。"""
