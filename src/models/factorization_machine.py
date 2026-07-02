@@ -1,3 +1,5 @@
+"""因子分解机模型实现，用于稀疏或标准化特征上的二分类。"""
+
 import numpy as np
 import pandas as pd
 
@@ -118,3 +120,4 @@ class FactorizationMachineClassifier:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return (self.predict_proba(X)[:, 1] > 0.5).astype(int)
+"""因子分解机模型实现，用于稀疏或标准化特征上的二分类。"""

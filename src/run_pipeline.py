@@ -1,3 +1,5 @@
+"""命令行流水线入口，负责串联特征构建、训练和提交生成。"""
+
 import argparse
 
 import pandas as pd
@@ -289,3 +291,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""命令行流水线入口，负责串联特征构建、训练和提交生成。"""

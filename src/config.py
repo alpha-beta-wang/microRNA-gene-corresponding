@@ -1,3 +1,5 @@
+"""项目路径、数据列名和输出目录等全局配置。"""
+
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -23,3 +25,4 @@ MIRNA_SEQUENCE_COLUMN = "mirna_sequence"
 
 SEED = 42
 N_SPLITS = 5
+"""项目路径、数据列名和输出目录等全局配置。"""

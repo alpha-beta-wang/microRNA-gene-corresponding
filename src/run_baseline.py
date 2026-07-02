@@ -1,3 +1,5 @@
+"""基线实验入口，用于快速训练基础模型并生成初始结果。"""
+
 import pandas as pd
 
 from src.config import TARGET_COLUMN, GENE_COLUMN, MIRNA_COLUMN
@@ -74,3 +76,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""基线实验入口，用于快速训练基础模型并生成初始结果。"""

@@ -1,3 +1,5 @@
+"""实验配置图形界面，封装参数编辑、配置保存和后台运行。"""
+
 from __future__ import annotations
 
 import json

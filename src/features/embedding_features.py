@@ -1,12 +1,4 @@
-"""3-mer co-occurrence → PPMI → TruncatedSVD embedding features.
-
-Non-neural "word embedding" for biological sequences using classical
-distributional semantics: k-mer tokens that co-occur in similar contexts
-get similar low-dimensional vectors via PPMI matrix factorization.
-
-Only fitted on training data; test data is projected through the learned
-embedding space to avoid leakage.
-"""
+"""k-mer 共现 embedding 特征模块，基于 PPMI 和 SVD 生成序列表征。"""
 
 from collections import Counter, defaultdict
 

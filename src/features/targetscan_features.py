@@ -1,3 +1,5 @@
+"""TargetScan 风格特征模块，统计规范种子位点和上下文信息。"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -166,3 +168,4 @@ def compute_targetscan_features(df: pd.DataFrame) -> pd.DataFrame:
         for gene, mirna in zip(df[GENE_SEQUENCE_COLUMN].fillna(""), df[MIRNA_SEQUENCE_COLUMN].fillna(""))
     ]
     return pd.DataFrame(rows, index=df.index).fillna(0)
+"""TargetScan 风格特征模块，统计规范种子位点和上下文信息。"""

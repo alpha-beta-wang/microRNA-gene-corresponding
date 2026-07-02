@@ -1,3 +1,5 @@
+"""实体频次特征模块，统计训练集中 miRNA 和 gene 出现次数。"""
+
 import pandas as pd
 
 from src.config import GENE_COLUMN, MIRNA_COLUMN
@@ -31,3 +33,4 @@ def compute_entity_count_features(train: pd.DataFrame, test: pd.DataFrame) -> tu
         return features
 
     return build(train), build(test)
+"""实体频次特征模块，统计训练集中 miRNA 和 gene 出现次数。"""

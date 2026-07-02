@@ -1,3 +1,5 @@
+"""种子区变体特征模块，比较不同 miRNA seed 窗口的匹配情况。"""
+
 import pandas as pd
 
 from src.config import GENE_SEQUENCE_COLUMN, MIRNA_SEQUENCE_COLUMN
@@ -52,3 +54,4 @@ def compute_seed_variant_features(df: pd.DataFrame) -> pd.DataFrame:
         ]
 
     return features.fillna(0)
+"""种子区变体特征模块，比较不同 miRNA seed 窗口的匹配情况。"""

@@ -1,3 +1,5 @@
+"""可配置实验运行器，负责特征、模型、融合、输出和飞书记录。"""
+
 from __future__ import annotations
 
 import argparse

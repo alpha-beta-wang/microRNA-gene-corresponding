@@ -1,3 +1,5 @@
+"""二核苷酸组成特征模块，比较 miRNA 与 gene 的二联体比例差异。"""
+
 from itertools import product
 
 import pandas as pd
@@ -30,3 +32,4 @@ def compute_dinucleotide_features(df: pd.DataFrame) -> pd.DataFrame:
         features[f"dinuc_absdiff_{token}"] = (features[gene_col] - features[mirna_col]).abs()
 
     return features.fillna(0)
+"""二核苷酸组成特征模块，比较 miRNA 与 gene 的二联体比例差异。"""

@@ -1,3 +1,5 @@
+"""高级命中特征模块，统计精确 seed 命中和局部 AT 环境。"""
+
 import pandas as pd
 
 from src.config import GENE_SEQUENCE_COLUMN, MIRNA_SEQUENCE_COLUMN
@@ -51,3 +53,4 @@ def compute_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return features.fillna(0)
+"""高级命中特征模块，统计精确 seed 命中和局部 AT 环境。"""

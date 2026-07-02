@@ -1,3 +1,5 @@
+"""分组交叉验证检查工具，用于评估不同分组策略的影响。"""
+
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
@@ -80,3 +82,4 @@ if __name__ == "__main__":
     feats = pd.concat([basic, match], axis=1)
     feats = feats.loc[:, ~feats.columns.duplicated()]
     run_group_validation(feats, bundle.train[TARGET_COLUMN], bundle.train)
+"""分组交叉验证检查工具，用于评估不同分组策略的影响。"""

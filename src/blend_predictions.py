@@ -1,3 +1,5 @@
+"""预测结果融合工具，用于合并多个提交或概率文件。"""
+
 from __future__ import annotations
 
 import argparse
@@ -176,3 +178,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+"""预测结果融合工具，用于合并多个提交或概率文件。"""
