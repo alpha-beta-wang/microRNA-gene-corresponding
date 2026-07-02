@@ -1,0 +1,120 @@
+{
+  "experiment_name": "kmer_baseline_config",
+  "features": {
+    "basic": true,
+    "match": true,
+    "advanced": true,
+    "kmer": true,
+    "rna_energy": false,
+    "entity_counts": false,
+    "seed_variants": false,
+    "dinucleotide": false,
+    "targetscan": false,
+    "kmer_interaction": false,
+    "alignment": false,
+    "position": false,
+    "seed_type": false,
+    "embedding": false
+  },
+  "kmer": {
+    "mirna_k": 3,
+    "gene_k": 3,
+    "gene_max_features": 256
+  },
+  "embedding": {
+    "k": 3,
+    "dim": 12,
+    "context_radius": 2,
+    "min_count": 2
+  },
+  "models": {
+    "lgbm": true,
+    "xgb": true,
+    "extra_trees": false,
+    "knn": false,
+    "rf": false,
+    "svm": false,
+    "fm": false
+  },
+  "training": {
+    "seeds": [42, 123, 456, 789, 2024],
+    "n_splits": 5,
+    "fold_strategy": "stratified",
+    "group_column": "",
+    "scale_pos_weight": "auto",
+    "training_method": "normal",
+    "ensemble_mode": "mean",
+    "hard_negative_threshold": 0.8,
+    "hard_negative_top_fraction": "",
+    "hyperopt_enabled": false,
+    "hyperopt_trials": 20
+  },
+  "model_params": {
+    "lgbm": {
+      "n_estimators": 3000,
+      "learning_rate": 0.01,
+      "max_depth": 6,
+      "num_leaves": 31,
+      "min_child_samples": 10,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "reg_alpha": 0.1,
+      "reg_lambda": 0.1,
+      "early_stopping_round": 100
+    },
+    "xgb": {
+      "n_estimators": 3000,
+      "learning_rate": 0.01,
+      "max_depth": 6,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "reg_alpha": 0.1,
+      "reg_lambda": 0.1,
+      "early_stopping_rounds": 100
+    },
+    "extra_trees": {
+      "n_estimators": 800,
+      "max_depth": null,
+      "min_samples_leaf": 2,
+      "max_features": "sqrt"
+    },
+    "knn": {
+      "n_neighbors": 35,
+      "weights": "distance",
+      "p": 2
+    },
+    "rf": {
+      "n_estimators": 500,
+      "max_depth": 12,
+      "min_samples_split": 5,
+      "min_samples_leaf": 2,
+      "max_features": "sqrt"
+    },
+    "svm": {
+      "kernel": "rbf",
+      "C": 1.0,
+      "gamma": "scale",
+      "class_weight": "balanced"
+    },
+    "fm": {
+      "n_factors": 8,
+      "learning_rate": 0.001,
+      "epochs": 300,
+      "batch_size": 128,
+      "reg_w": 0.001,
+      "reg_v": 0.001
+    }
+  },
+  "thresholds": [0.43, 0.45, 0.46, 0.47, 0.48, 0.49, 0.5, 0.51, 0.52],
+  "output": {
+    "submission_prefix": "submission_config",
+    "add_run_id": true,
+    "save_oof": true,
+    "save_test_proba": true
+  },
+  "lark": {
+    "enabled": true,
+    "spreadsheet_token": "JTGqsBzSlhpTcPtlJ6scOlbenwQ",
+    "sheet_id": "c8da76"
+  }
+}
