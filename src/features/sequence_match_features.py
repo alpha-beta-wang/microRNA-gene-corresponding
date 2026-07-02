@@ -2,7 +2,7 @@ import pandas as pd
 
 from src.config import GENE_SEQUENCE_COLUMN, MIRNA_SEQUENCE_COLUMN
 
-COMPLEMENT = str.maketrans("ACGUT", "UGCAA")
+COMPLEMENT = str.maketrans("ACGUT", "TGCAA")
 
 
 def _reverse_complement(seq: str) -> str:

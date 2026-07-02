@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
@@ -54,6 +56,7 @@ def _base_lgbm(seed: int, params: dict | None = None) -> LGBMClassifier:
         metric="binary_logloss",
         early_stopping_round=100,
         verbose=-1,
+        scale_pos_weight=scale_pos_weight,
     )
     if params:
         defaults.update(params)
@@ -73,6 +76,7 @@ def _base_xgb(seed: int, params: dict | None = None) -> XGBClassifier:
         early_stopping_rounds=100,
         eval_metric="logloss",
         verbosity=0,
+        scale_pos_weight=scale_pos_weight,
     )
     if params:
         defaults.update(params)
@@ -185,6 +189,17 @@ def _select_features(
     return X_tr[selected], X_val[selected], selected
 
 
+def _best_threshold(y_true, proba) -> float:
+    best_t = 0.5
+    best_f1 = -1.0
+    for t in np.linspace(0.1, 0.9, 81):
+        cur = f1_score(y_true, (proba >= t).astype(int))
+        if cur > best_f1:
+            best_f1 = cur
+            best_t = float(t)
+    return best_t
+
+
 def train_ensemble(
     features: pd.DataFrame,
     labels: pd.Series,
@@ -218,7 +233,7 @@ def train_ensemble(
         results[f"{m}_models"] = []
         results[f"{m}_fold_scores"] = []
 
-    for fold_idx, (train_idx, val_idx) in enumerate(folds.split(features, labels)):
+    for fold_idx, (train_idx, val_idx) in enumerate(split_iter):
         X_tr, X_val = features.iloc[train_idx], features.iloc[val_idx]
         y_tr, y_val = labels.iloc[train_idx], labels.iloc[val_idx]
 
@@ -328,6 +343,10 @@ def optimize_thresholds(results: dict, labels: pd.Series) -> dict:
                 best_t = t
         results[f"{key}_best_threshold"] = best_t
         results[f"{key}_best_f1"] = best_f1
+
+    for prefix in ["lgbm", "xgb", "ensemble"]:
+        ts = results[f"{prefix}_fold_thresholds"]
+        results[f"{prefix}_nested_threshold"] = float(np.median(ts))
     return results
 
 
