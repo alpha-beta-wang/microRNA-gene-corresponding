@@ -11,6 +11,7 @@ from src.config import SEED
 
 
 def _lgbm_objective(trial, X_tr, X_val, y_tr, y_val, seed):
+    """Evaluate a LightGBM parameter trial with validation F1."""
     params = {
         "n_estimators": trial.suggest_int("n_estimators", 500, 4000, step=200),
         "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.08, log=True),
@@ -32,6 +33,7 @@ def _lgbm_objective(trial, X_tr, X_val, y_tr, y_val, seed):
 
 
 def _xgb_objective(trial, X_tr, X_val, y_tr, y_val, seed):
+    """Evaluate an XGBoost parameter trial with validation F1."""
     params = {
         "n_estimators": trial.suggest_int("n_estimators", 500, 4000, step=200),
         "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.08, log=True),
@@ -94,4 +96,3 @@ def run_optuna(
         print(f"  [optuna] {m} best_params={result[m]}")
 
     return result
-"""Optuna 超参数搜索模块，提供 LightGBM 和 XGBoost 调参入口。"""

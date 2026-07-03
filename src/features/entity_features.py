@@ -6,6 +6,7 @@ from src.config import GENE_COLUMN, MIRNA_COLUMN
 
 
 def compute_entity_count_features(train: pd.DataFrame, test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Map train-set gene and miRNA occurrence counts onto train and test rows."""
     combined = pd.concat(
         [
             train[[GENE_COLUMN, MIRNA_COLUMN]].assign(_is_train=1),
@@ -22,6 +23,7 @@ def compute_entity_count_features(train: pd.DataFrame, test: pd.DataFrame) -> tu
     mirna_test = test[MIRNA_COLUMN].value_counts()
 
     def build(frame: pd.DataFrame) -> pd.DataFrame:
+        """Build entity count features for one data frame."""
         features = pd.DataFrame(index=frame.index)
         features["gene_all_count"] = frame[GENE_COLUMN].map(gene_all).fillna(0).astype(int)
         features["mirna_all_count"] = frame[MIRNA_COLUMN].map(mirna_all).fillna(0).astype(int)
@@ -33,4 +35,3 @@ def compute_entity_count_features(train: pd.DataFrame, test: pd.DataFrame) -> tu
         return features
 
     return build(train), build(test)
-"""实体频次特征模块，统计训练集中 miRNA 和 gene 出现次数。"""

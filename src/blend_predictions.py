@@ -25,11 +25,13 @@ DEFAULT_INPUTS = [
 
 
 def _read_series(path) -> np.ndarray:
+    """Load a single-column prediction file as a probability array."""
     frame = pd.read_csv(path)
     return frame.iloc[:, -1].to_numpy(dtype=float)
 
 
 def _load_inputs():
+    """Load labels, submission template, metadata, and available prediction files."""
     loaded = []
     for name, oof_path, test_path in DEFAULT_INPUTS:
         if oof_path.exists() and test_path.exists():
@@ -40,6 +42,7 @@ def _load_inputs():
 
 
 def _weight_grid(n: int, step: float = 0.1):
+    """Generate normalized weight combinations at the requested step size."""
     slots = int(round(1.0 / step))
     for parts in product(range(slots + 1), repeat=n):
         if sum(parts) == slots:
@@ -47,6 +50,7 @@ def _weight_grid(n: int, step: float = 0.1):
 
 
 def _best_blends(y: pd.Series, loaded, top_n: int = 8):
+    """Search weighted blends and return the best OOF F1 candidates."""
     names = [x[0] for x in loaded]
     oofs = np.vstack([x[1] for x in loaded])
     results = []
@@ -81,6 +85,7 @@ def _best_blends(y: pd.Series, loaded, top_n: int = 8):
 
 
 def _make_topk_submission(test_meta, template, test_proba, name: str, pos_count: int) -> dict:
+    """Create a submission by marking the top-K probabilities as positives."""
     threshold = float(np.sort(test_proba)[-pos_count])
     labels = (test_proba >= threshold).astype(int)
     if labels.sum() > pos_count:
@@ -102,6 +107,7 @@ def _make_topk_submission(test_meta, template, test_proba, name: str, pos_count:
 
 
 def _record_blend_to_lark(experiment_name: str, rows: list[dict], weights_desc: str, train_f1: float) -> None:
+    """Append the blend experiment summary to the Lark sheet."""
     start = _next_lark_row(DEFAULT_LARK_TOKEN, DEFAULT_LARK_SHEET_ID)
     lark_rows = []
     for row in rows:
@@ -131,6 +137,7 @@ def _record_blend_to_lark(experiment_name: str, rows: list[dict], weights_desc: 
 
 
 def main() -> None:
+    """Run blend search, write submissions, and record the best result."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--rank", type=int, default=1, help="Which blend candidate rank to materialize.")
     parser.add_argument("--pos-counts", default="148,150,151,152,153,154,155,156,158", help="Comma-separated positive counts.")
@@ -178,4 +185,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-"""预测结果融合工具，用于合并多个提交或概率文件。"""

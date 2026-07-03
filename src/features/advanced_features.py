@@ -7,6 +7,7 @@ from src.features.sequence_match_features import _reverse_complement
 
 
 def _count_substring(needle: str, haystack: str) -> int:
+    """Count occurrences of a substring in a target sequence."""
     if not needle or not haystack:
         return 0
     count = 0
@@ -21,6 +22,7 @@ def _count_substring(needle: str, haystack: str) -> int:
 
 
 def _first_hit_local_at(needle: str, haystack: str, window: int = 20) -> float:
+    """Check whether a substring appears inside a local target window."""
     if not needle or not haystack:
         return 0.0
     idx = haystack.find(needle)
@@ -35,6 +37,7 @@ def _first_hit_local_at(needle: str, haystack: str, window: int = 20) -> float:
 
 
 def compute_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute GC, length, seed-hit, and local-match sequence features."""
     gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
     mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("")
     features = pd.DataFrame(index=df.index)
@@ -53,4 +56,3 @@ def compute_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return features.fillna(0)
-"""高级命中特征模块，统计精确 seed 命中和局部 AT 环境。"""

@@ -9,10 +9,12 @@ _COMPLEMENT = str.maketrans("ACGUT", "UGCAA")
 
 
 def _reverse_complement(seq: str) -> str:
+    """Return the reverse complement of an RNA or DNA sequence."""
     return seq.translate(_COMPLEMENT)[::-1]
 
 
 def _aligner_local() -> PairwiseAligner:
+    """Create a local aligner with the project scoring parameters."""
     a = PairwiseAligner()
     a.mode = "local"
     a.match_score = 2
@@ -23,6 +25,7 @@ def _aligner_local() -> PairwiseAligner:
 
 
 def _aligner_global() -> PairwiseAligner:
+    """Create a global aligner with the project scoring parameters."""
     a = PairwiseAligner()
     a.mode = "global"
     a.match_score = 2
@@ -58,6 +61,7 @@ def _best_seed_window(mirna: str, gene: str, window_margin: int = 30) -> str | N
 
 
 def compute_alignment_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute local and global alignment features for each pair."""
     gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
     mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("")
     features = pd.DataFrame(index=df.index)
@@ -131,4 +135,3 @@ def compute_alignment_features(df: pd.DataFrame) -> pd.DataFrame:
     features["align__rc_local_score_norm"] = rc_local_scores_norm
 
     return features
-"""序列比对特征模块，基于局部或全局比对度量 miRNA-gene 匹配质量。"""

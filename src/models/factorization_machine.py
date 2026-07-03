@@ -5,10 +5,12 @@ import pandas as pd
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
+    """Compute numerically stable sigmoid probabilities."""
     return 1.0 / (1.0 + np.exp(-np.clip(x, -20, 20)))
 
 
 def _log_loss(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
+    """Compute binary cross-entropy loss."""
     eps = 1e-15
     return -(y_true * np.log(np.clip(y_pred, eps, 1 - eps))
              + (1 - y_true) * np.log(np.clip(1 - y_pred, eps, 1 - eps)))
@@ -34,6 +36,7 @@ class FactorizationMachineClassifier:
         random_state: int = 42,
         verbose: int = 0,
     ):
+        """Initialize factorization machine hyperparameters."""
         self.n_factors = n_factors
         self.learning_rate = learning_rate
         self.epochs = epochs
@@ -59,6 +62,7 @@ class FactorizationMachineClassifier:
         return np.clip(linear + interactions, -30, 30)
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "FactorizationMachineClassifier":
+        """Train the factorization machine with mini-batch gradient descent."""
         if isinstance(y, pd.Series):
             y = y.values
         n, p = X.shape
@@ -114,10 +118,11 @@ class FactorizationMachineClassifier:
         return self
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """Return negative-class and positive-class probabilities."""
         raw = self._predict_raw(X)
         pos = _sigmoid(raw)
         return np.column_stack([1 - pos, pos])
 
     def predict(self, X: np.ndarray) -> np.ndarray:
+        """Return binary predictions using a 0.5 probability threshold."""
         return (self.predict_proba(X)[:, 1] > 0.5).astype(int)
-"""因子分解机模型实现，用于稀疏或标准化特征上的二分类。"""

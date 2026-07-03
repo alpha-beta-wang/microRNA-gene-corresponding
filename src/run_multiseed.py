@@ -22,6 +22,7 @@ SEEDS = [42, 123, 456, 789, 2024]
 
 
 def _build_lgbm(seed: int, scale_pos_weight: float) -> LGBMClassifier:
+    """Create a LightGBM base model for the given seed."""
     return LGBMClassifier(
         n_estimators=3000, learning_rate=0.01, max_depth=6, num_leaves=31,
         min_child_samples=10, subsample=0.8, colsample_bytree=0.8,
@@ -31,6 +32,7 @@ def _build_lgbm(seed: int, scale_pos_weight: float) -> LGBMClassifier:
 
 
 def _build_xgb(seed: int, scale_pos_weight: float) -> XGBClassifier:
+    """Create an XGBoost base model for the given seed."""
     return XGBClassifier(
         n_estimators=3000, learning_rate=0.01, max_depth=6,
         subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1, reg_lambda=0.1,
@@ -40,6 +42,7 @@ def _build_xgb(seed: int, scale_pos_weight: float) -> XGBClassifier:
 
 
 def main():
+    """Train models with multiple seeds and generate thresholded submissions."""
     print("=== loading data ===")
     bundle = build_dataset_bundle()
     print(f"train={len(bundle.train)} test={len(bundle.test)}")
@@ -140,4 +143,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""多随机种子实验入口，用于提升交叉验证和提交结果稳定性。"""

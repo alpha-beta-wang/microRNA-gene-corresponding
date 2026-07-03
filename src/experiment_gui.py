@@ -43,6 +43,7 @@ MODEL_LABELS = {
 
 class ExperimentGui(tk.Tk):
     def __init__(self) -> None:
+        """Initialize the experiment GUI and its default state."""
         super().__init__()
         self.title("DataFountain 534 ?????")
         self.geometry("1160x800")
@@ -61,6 +62,7 @@ class ExperimentGui(tk.Tk):
         self._load_to_ui()
 
     def _build_ui(self) -> None:
+        """Build parameter controls, feature toggles, run button, and log pane."""
         toolbar = ttk.Frame(self, padding=(10, 8))
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
@@ -163,6 +165,7 @@ class ExperimentGui(tk.Tk):
         )
 
     def _load_to_ui(self) -> None:
+        """Synchronize the current configuration into UI widgets."""
         cfg = self.config_data
         training = cfg.get("training", {})
         for name, var in self.feature_vars.items():
@@ -196,6 +199,7 @@ class ExperimentGui(tk.Tk):
             self.entries[key].insert(0, value)
 
     def _config_from_ui(self) -> dict:
+        """Collect widget values and assemble an experiment configuration."""
         cfg = json.loads(json.dumps(self.config_data))
         cfg.setdefault("training", {})
         cfg.setdefault("kmer", {})
@@ -232,6 +236,7 @@ class ExperimentGui(tk.Tk):
         return cfg
 
     def _save_from_ui(self) -> None:
+        """Save the current UI configuration to a JSON file."""
         try:
             cfg = self._config_from_ui()
             save_config(cfg, self.config_path)
@@ -240,6 +245,7 @@ class ExperimentGui(tk.Tk):
             messagebox.showerror("????", str(exc))
 
     def _show_config(self) -> None:
+        """Display the configuration generated from the current UI state."""
         try:
             cfg = self._config_from_ui()
             self._append_log(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
@@ -247,6 +253,7 @@ class ExperimentGui(tk.Tk):
             messagebox.showerror("????", str(exc))
 
     def _run_experiment(self) -> None:
+        """Validate state and start the experiment worker thread."""
         try:
             cfg = self._config_from_ui()
             save_config(cfg, self.config_path)
@@ -258,6 +265,7 @@ class ExperimentGui(tk.Tk):
         threading.Thread(target=self._run_worker, daemon=True).start()
 
     def _run_worker(self) -> None:
+        """Run the experiment command in the background and stream logs."""
         cmd = [sys.executable, "-m", "src.experiment_runner", "--config", str(self.config_path)]
         self._append_log("?????" + " ".join(cmd) + "\n")
         proc = subprocess.Popen(
@@ -277,18 +285,22 @@ class ExperimentGui(tk.Tk):
         self.after(0, self._enable_run_button)
 
     def _append_log(self, text: str) -> None:
+        """Append log text to the UI in a thread-safe way."""
         self.after(0, lambda: self._append_log_in_ui(text))
 
     def _append_log_in_ui(self, text: str) -> None:
+        """Update the log text widget on the Tk main thread."""
         self.log.insert(tk.END, text)
         self.log.see(tk.END)
 
     def _enable_run_button(self) -> None:
+        """Re-enable the run button after an experiment finishes."""
         if self.run_button is not None:
             self.run_button.configure(state=tk.NORMAL)
 
 
 def main() -> None:
+    """Start the experiment configuration GUI."""
     ExperimentGui().mainloop()
 
 

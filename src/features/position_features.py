@@ -7,6 +7,7 @@ from src.features.sequence_match_features import COMPLEMENT
 
 
 def _reverse_complement(seq: str) -> str:
+    """Return the reverse complement of an RNA or DNA sequence."""
     return seq.translate(COMPLEMENT)[::-1]
 
 
@@ -71,6 +72,7 @@ def _seed_in_3prime_region(seed: str, gene: str, fraction: float = 0.3) -> int:
 
 
 def compute_position_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute seed-match position, window distribution, and coverage features."""
     gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
     mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("")
     features = pd.DataFrame(index=df.index)
@@ -104,4 +106,3 @@ def compute_position_features(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return features.fillna(-1.0)
-"""位置特征模块，刻画种子命中相对 gene 3' 端的位置。"""

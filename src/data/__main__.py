@@ -13,4 +13,3 @@ if __name__ == "__main__":
     print(f"train_missing_mirna_sequences={bundle.train_missing_mirna_sequences}")
     print(f"test_missing_gene_sequences={bundle.test_missing_gene_sequences}")
     print(f"test_missing_mirna_sequences={bundle.test_missing_mirna_sequences}")
-"""数据模块命令行入口，用于检查或加载项目数据。"""

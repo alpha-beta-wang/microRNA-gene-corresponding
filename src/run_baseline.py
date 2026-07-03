@@ -12,6 +12,7 @@ from src.models.predict import predict_and_submit, predict_ensemble
 
 
 def main():
+    """Run baseline features, ensemble training, and submission generation."""
     print("=== loading data ===")
     bundle = build_dataset_bundle()
     print(
@@ -76,4 +77,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""基线实验入口，用于快速训练基础模型并生成初始结果。"""

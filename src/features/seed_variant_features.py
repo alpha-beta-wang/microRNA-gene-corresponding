@@ -7,6 +7,7 @@ from src.features.sequence_match_features import _reverse_complement
 
 
 def _count_substring(needle: str, haystack: str) -> int:
+    """Count occurrences of a substring in a target sequence."""
     if not needle or not haystack:
         return 0
     count = 0
@@ -20,6 +21,7 @@ def _count_substring(needle: str, haystack: str) -> int:
 
 
 def _max_consecutive_match(short: str, long: str) -> int:
+    """Compute the longest consecutive match between two sequences."""
     best = 0
     for i in range(len(long) - len(short) + 1):
         cur = 0
@@ -33,6 +35,7 @@ def _max_consecutive_match(short: str, long: str) -> int:
 
 
 def compute_seed_variant_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute seed variant, offset-match, and match-strength features."""
     gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("").str.upper().str.replace("U", "T", regex=False)
     mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("").str.upper()
     features = pd.DataFrame(index=df.index)
@@ -54,4 +57,3 @@ def compute_seed_variant_features(df: pd.DataFrame) -> pd.DataFrame:
         ]
 
     return features.fillna(0)
-"""种子区变体特征模块，比较不同 miRNA seed 窗口的匹配情况。"""

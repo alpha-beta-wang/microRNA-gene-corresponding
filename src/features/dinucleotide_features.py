@@ -10,16 +10,19 @@ DINUCS = ["".join(p) for p in product("ACGT", repeat=2)]
 
 
 def _normalize(seq: str) -> str:
+    """Normalize missing sequences to empty uppercase strings."""
     return seq.upper().replace("U", "T") if isinstance(seq, str) else ""
 
 
 def _ratio(seq: str, token: str) -> float:
+    """Compute the normalized frequency of one dinucleotide token."""
     seq = _normalize(seq)
     denom = max(len(seq) - 1, 1)
     return seq.count(token) / denom
 
 
 def compute_dinucleotide_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract dinucleotide composition features for gene and miRNA sequences."""
     gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
     mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("")
     features = pd.DataFrame(index=df.index)
@@ -32,4 +35,3 @@ def compute_dinucleotide_features(df: pd.DataFrame) -> pd.DataFrame:
         features[f"dinuc_absdiff_{token}"] = (features[gene_col] - features[mirna_col]).abs()
 
     return features.fillna(0)
-"""二核苷酸组成特征模块，比较 miRNA 与 gene 的二联体比例差异。"""

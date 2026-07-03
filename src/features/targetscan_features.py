@@ -10,14 +10,17 @@ from src.features.sequence_match_features import _reverse_complement
 
 
 def _norm_gene(seq: str) -> str:
+    """Normalize gene sequence text to a DNA-style alphabet."""
     return seq.upper().replace("U", "T") if isinstance(seq, str) else ""
 
 
 def _norm_mirna(seq: str) -> str:
+    """Normalize miRNA sequence text to an RNA-style alphabet."""
     return seq.upper().replace("T", "U") if isinstance(seq, str) else ""
 
 
 def _find_all(haystack: str, needle: str) -> list[int]:
+    """Return all positions where a substring appears in a target sequence."""
     if not haystack or not needle:
         return []
     out = []
@@ -31,12 +34,14 @@ def _find_all(haystack: str, needle: str) -> list[int]:
 
 
 def _au_ratio(seq: str) -> float:
+    """Compute the A/U-richness ratio for a sequence window."""
     if not seq:
         return 0.0
     return (seq.count("A") + seq.count("T") + seq.count("U")) / len(seq)
 
 
 def _wc_pair(m_base: str, g_base: str) -> bool:
+    """Return whether two bases form a Watson-Crick pair."""
     return (m_base, g_base) in {
         ("A", "T"),
         ("A", "U"),
@@ -48,10 +53,12 @@ def _wc_pair(m_base: str, g_base: str) -> bool:
 
 
 def _wobble_pair(m_base: str, g_base: str) -> bool:
+    """Return whether two bases form a G-U wobble pair."""
     return (m_base, g_base) in {("G", "T"), ("G", "U"), ("U", "G"), ("T", "G")}
 
 
 def _pairing_score(mirna_region: str, target_region: str) -> tuple[int, int, int]:
+    """Score base pairing between a miRNA region and target region."""
     wc = 0
     wobble = 0
     longest = 0
@@ -70,6 +77,7 @@ def _pairing_score(mirna_region: str, target_region: str) -> tuple[int, int, int
 
 
 def _site_metrics(gene: str, mirna: str) -> dict[str, float]:
+    """Summarize TargetScan-style site metrics for one miRNA-gene pair."""
     gene = _norm_gene(gene)
     mirna = _norm_mirna(mirna)
     if len(gene) == 0 or len(mirna) < 8:
@@ -163,9 +171,9 @@ def _site_metrics(gene: str, mirna: str) -> dict[str, float]:
 
 
 def compute_targetscan_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute TargetScan-style seed-site and context features for all rows."""
     rows = [
         _site_metrics(gene, mirna)
         for gene, mirna in zip(df[GENE_SEQUENCE_COLUMN].fillna(""), df[MIRNA_SEQUENCE_COLUMN].fillna(""))
     ]
     return pd.DataFrame(rows, index=df.index).fillna(0)
-"""TargetScan 风格特征模块，统计规范种子位点和上下文信息。"""

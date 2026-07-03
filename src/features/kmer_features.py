@@ -10,6 +10,7 @@ from src.config import GENE_SEQUENCE_COLUMN, MIRNA_SEQUENCE_COLUMN
 
 
 def _normalize(seq: str) -> str:
+    """Normalize a sequence to an uppercase string."""
     if not isinstance(seq, str):
         return ""
     return seq.upper().replace("U", "T")
@@ -23,6 +24,7 @@ def _fit_transform_char_kmer(
     min_df: int,
     max_features: int,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Fit character k-mer TF-IDF and transform train and test sequences."""
     train_text = train_seqs.fillna("").map(_normalize)
     test_text = test_seqs.fillna("").map(_normalize)
 
@@ -59,6 +61,7 @@ def compute_kmer_features(
     gene_k: int = 3,
     gene_max_features: int = 256,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Generate miRNA and gene k-mer TF-IDF feature matrices."""
     train_blocks = []
     test_blocks = []
 
@@ -88,4 +91,3 @@ def compute_kmer_features(
         pd.concat(train_blocks, axis=1),
         pd.concat(test_blocks, axis=1),
     )
-"""k-mer TF-IDF 特征模块，从 miRNA 和 gene 序列提取字符 n-gram 表示。"""

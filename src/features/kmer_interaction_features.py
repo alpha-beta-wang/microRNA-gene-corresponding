@@ -15,12 +15,14 @@ _RC_MAP = {k: k.translate(_RC)[::-1] for k in ALL_3MERS}
 
 
 def _normalize(seq: str) -> str:
+    """Normalize a sequence to an uppercase string."""
     if not isinstance(seq, str):
         return ""
     return seq.upper().replace("U", "T")
 
 
 def _kmer_counts(seq: str, k: int = 3) -> dict:
+    """Count k-mer occurrences in a sequence."""
     counts = {}
     for i in range(len(seq) - k + 1):
         km = seq[i : i + k]
@@ -29,6 +31,7 @@ def _kmer_counts(seq: str, k: int = 3) -> dict:
 
 
 def _interaction_vector(mirna: str, gene: str) -> np.ndarray:
+    """Compute interaction counts between miRNA and gene k-mers."""
     m = _normalize(mirna)
     g = _normalize(gene)
     if not m or not g:
@@ -51,6 +54,7 @@ def _interaction_vector(mirna: str, gene: str) -> np.ndarray:
 
 
 def compute_kmer_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract seed, reverse-complement, and k-mer interaction features."""
     mirna_col = df[MIRNA_SEQUENCE_COLUMN].fillna("")
     gene_col = df[GENE_SEQUENCE_COLUMN].fillna("")
 
@@ -60,4 +64,3 @@ def compute_kmer_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
         for m, g in zip(mirna_col, gene_col)
     ])
     return pd.DataFrame(mat, index=df.index, columns=cols)
-"""k-mer 交互特征模块，统计 miRNA 与 gene 反向互补 k-mer 的相互作用。"""

@@ -110,6 +110,7 @@ class EmbeddingFeaturizer:
     """
 
     def __init__(self) -> None:
+        """Store training parameters for the k-mer embedding featurizer."""
         self._fitted = False
         self._k = 3
         self._dim = 12
@@ -128,6 +129,7 @@ class EmbeddingFeaturizer:
         context_radius: int | None = None,
         min_count: int | None = None,
     ) -> pd.DataFrame:
+        """Fit the embedding model and return features for the current frame."""
         if not self._fitted:
             if k is not None:
                 self._k = k
@@ -143,6 +145,7 @@ class EmbeddingFeaturizer:
     # ── fitting ───────────────────────────────────────────────
 
     def _fit(self, df: pd.DataFrame) -> None:
+        """Train k-mer Word2Vec models from the sequence corpus."""
         gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
         mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("")
 
@@ -171,6 +174,7 @@ class EmbeddingFeaturizer:
     # ── transforming ──────────────────────────────────────────
 
     def _transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert sequences into averaged k-mer embedding vectors."""
         gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
         mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("")
 

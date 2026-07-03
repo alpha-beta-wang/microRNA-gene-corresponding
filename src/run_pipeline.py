@@ -17,6 +17,7 @@ from src.models.predict import predict_and_submit
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line options for the training pipeline."""
     p = argparse.ArgumentParser(description="microRNA-gene MTI prediction pipeline")
     p.add_argument(
         "--feature-blocks", default="basic,match",
@@ -106,6 +107,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _print_results(results: dict, model_names: list[str]) -> None:
+    """Print cross-validation scores and selected thresholds."""
     for m in model_names:
         fs = f"{m}_fold_scores"
         bt = f"{m}_oof_best_threshold"
@@ -129,6 +131,7 @@ def _submit_standard(
     model_names: list[str],
     tag_prefix: str,
 ) -> None:
+    """Generate submissions for individual model results."""
     for m in model_names:
         models_key = f"{m}_models"
         if models_key in results:
@@ -153,6 +156,7 @@ def _submit_ensemble(
     threshold: float,
     output_name: str,
 ) -> None:
+    """Generate a submission from averaged ensemble probabilities."""
     from src.models.predict import _predict_with_models
 
     model_probas = {}
@@ -178,6 +182,7 @@ def _submit_ensemble(
 
 
 def main():
+    """Run data loading, feature building, model training, and submission output."""
     args = parse_args()
 
     feature_blocks = [s.strip() for s in args.feature_blocks.split(",")]
@@ -291,4 +296,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""命令行流水线入口，负责串联特征构建、训练和提交生成。"""

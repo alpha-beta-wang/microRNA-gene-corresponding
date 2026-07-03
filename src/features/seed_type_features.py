@@ -85,6 +85,7 @@ def _classify_seed(mirna: str, gene: str) -> tuple[int, int, int, int]:
 
 
 def compute_seed_type_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Detect 6mer, 7mer, 8mer seed types and context features."""
     gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
     mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("")
     features = pd.DataFrame(index=df.index)

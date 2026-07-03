@@ -68,11 +68,13 @@ FEATURE_CN = {
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
+    """Read an experiment JSON configuration file."""
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_config(config: dict[str, Any], path: str | Path) -> None:
+    """Write an experiment configuration and create the parent directory."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -81,6 +83,7 @@ def save_config(config: dict[str, Any], path: str | Path) -> None:
 
 
 def list_score_factors() -> list[str]:
+    """Return the score-factor descriptions shown in reports."""
     return [
         "????????/???????????????????? gene/miRNA ????",
         "?????gene/miRNA ????????GC ??????",
@@ -98,10 +101,12 @@ def list_score_factors() -> list[str]:
 
 
 def _feature_flag(config: dict[str, Any], name: str) -> bool:
+    """Return whether a named feature block is enabled."""
     return bool(config.get("features", {}).get(name, False))
 
 
 def enabled_feature_names(config: dict[str, Any]) -> list[str]:
+    """List feature blocks enabled by the current configuration."""
     return [name for name in FEATURE_CN if _feature_flag(config, name)]
 
 
@@ -126,6 +131,7 @@ FEATURE_CN.update(
 
 
 def list_score_factors() -> list[str]:
+    """Return the score-factor descriptions shown in reports."""
     return [
         "????????/???????????????????? gene/miRNA ????",
         "?????gene/miRNA ????????GC ??????",
@@ -164,6 +170,7 @@ FEATURE_CN.update(
 
 
 def list_score_factors() -> list[str]:
+    """Return the score-factor descriptions shown in reports."""
     return [
         "数据与切分：训练/测试分布、交叉验证折数、随机种子、是否按 gene/miRNA 分组切分",
         "基础特征：gene/miRNA 长度、碱基比例、GC 含量、长度比",
@@ -185,6 +192,7 @@ def build_features(
     config: dict[str, Any],
     bundle: DatasetBundle | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.DataFrame, pd.DataFrame, dict[str, int]]:
+    """Build aligned train and test feature matrices from the configuration."""
     if bundle is None:
         bundle = build_dataset_bundle()
     train_blocks = []
@@ -192,6 +200,7 @@ def build_features(
     feature_counts: dict[str, int] = {}
 
     def add_block(name: str, train_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
+        """Append one feature block after aligning train and test columns."""
         train_blocks.append(train_df)
         test_blocks.append(test_df)
         feature_counts[name] = train_df.shape[1]
@@ -268,6 +277,7 @@ def build_features(
 
 
 def _scale_pos_weight(y: pd.Series, config: dict[str, Any]) -> float:
+    """Compute the positive-class weight from labels and configuration."""
     value = config.get("training", {}).get("scale_pos_weight", "auto")
     if value == "auto":
         pos = int(y.sum())
@@ -277,6 +287,7 @@ def _scale_pos_weight(y: pd.Series, config: dict[str, Any]) -> float:
 
 
 def _build_model(name: str, seed: int, scale_pos_weight: float, params: dict[str, Any]):
+    """Create a classifier by model name, seed, and parameter overrides."""
     if name == "lgbm":
         return LGBMClassifier(
             n_estimators=int(params.get("n_estimators", 3000)),
@@ -370,6 +381,7 @@ def _build_model(name: str, seed: int, scale_pos_weight: float, params: dict[str
 
 
 def _fit_predict(model_name: str, model, X_tr, y_tr, X_val, y_val, test_X) -> tuple[np.ndarray, np.ndarray]:
+    """Fit one fold model and return validation and test probabilities."""
     if model_name == "lgbm":
         model.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], eval_metric="logloss")
     elif model_name == "xgb":
@@ -380,6 +392,7 @@ def _fit_predict(model_name: str, model, X_tr, y_tr, X_val, y_val, test_X) -> tu
 
 
 def _split_iterator(config: dict[str, Any], train_X: pd.DataFrame, y: pd.Series, train_meta: pd.DataFrame, seed: int):
+    """Yield regular or grouped cross-validation splits from the configuration."""
     training = config.get("training", {})
     n_splits = int(training.get("n_splits", 5))
     strategy = training.get("fold_strategy", "stratified")
@@ -395,12 +408,14 @@ def _split_iterator(config: dict[str, Any], train_X: pd.DataFrame, y: pd.Series,
 
 
 def _lark_cli_base() -> list[str]:
+    """Build the base Lark CLI command."""
     appdata = os.environ.get("APPDATA", "")
     os.environ["PATH"] = f"C:\\Program Files\\nodejs;{appdata}\\npm;{os.environ.get('PATH', '')}"
     return ["lark-cli.cmd"]
 
 
 def _next_lark_row(token: str, sheet_id: str) -> int:
+    """Query the next writable row in the Lark sheet."""
     cmd = _lark_cli_base() + [
         "sheets",
         "+csv-get",
@@ -431,6 +446,7 @@ def _next_lark_row(token: str, sheet_id: str) -> int:
 
 
 def _write_lark_rows(token: str, sheet_id: str, start_row: int, rows: list[list[Any]]) -> None:
+    """Write experiment result rows to the Lark sheet."""
     fd, temp_path = tempfile.mkstemp(prefix="lark_experiment_", suffix=".csv", dir=PROJECT_ROOT, text=True)
     os.close(fd)
     temp_file = Path(temp_path)
@@ -458,6 +474,7 @@ def _write_lark_rows(token: str, sheet_id: str, start_row: int, rows: list[list[
 
 
 def record_experiment_to_lark(config: dict[str, Any], summary: dict[str, Any]) -> None:
+    """Record experiment settings, metrics, and outputs to the Lark sheet."""
     lark_cfg = config.get("lark", {})
     if not lark_cfg.get("enabled", True):
         print("lark_record=disabled")
@@ -510,6 +527,7 @@ def record_experiment_to_lark(config: dict[str, Any], summary: dict[str, Any]) -
 
 
 def record_experiment_to_lark(config: dict[str, Any], summary: dict[str, Any]) -> None:
+    """Record experiment settings, metrics, and outputs to the Lark sheet."""
     lark_cfg = config.get("lark", {})
     if not lark_cfg.get("enabled", True):
         print("lark_record=disabled")
@@ -594,6 +612,7 @@ def _run_optuna_search(
     config: dict[str, Any],
     seed: int,
 ) -> dict[str, dict[str, Any]]:
+    """Run Optuna hyperparameter search for the enabled models."""
     training = config.get("training", {})
     if not training.get("hyperopt_enabled", False):
         return {}
@@ -613,6 +632,7 @@ def _run_optuna_search(
     tuned: dict[str, dict[str, Any]] = {}
 
     def lgbm_objective(trial):
+        """Evaluate one LightGBM Optuna trial with validation F1."""
         params = {
             "n_estimators": trial.suggest_int("n_estimators", 500, 3000, step=250),
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.08, log=True),
@@ -630,6 +650,7 @@ def _run_optuna_search(
         return f1_score(y_val, model.predict_proba(X_val)[:, 1] >= 0.5)
 
     def xgb_objective(trial):
+        """Evaluate one XGBoost Optuna trial with validation F1."""
         params = {
             "n_estimators": trial.suggest_int("n_estimators", 500, 3000, step=250),
             "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.08, log=True),
@@ -671,6 +692,7 @@ def _train_cv_predictions(
     model_params: dict[str, dict[str, Any]],
     seeds: list[int],
 ) -> dict[str, Any]:
+    """Train enabled models across folds and seeds and collect predictions."""
     oof_by_model = {name: np.zeros(len(y), dtype=float) for name in enabled_models}
     oof_count_by_model = {name: np.zeros(len(y), dtype=int) for name in enabled_models}
     test_sum_by_model = {name: np.zeros(len(test_X), dtype=float) for name in enabled_models}
@@ -737,6 +759,7 @@ def _train_with_method(
     model_params: dict[str, dict[str, Any]],
     seeds: list[int],
 ) -> dict[str, Any]:
+    """Dispatch to regular CV or hard-negative training based on config."""
     method = config.get("training", {}).get("training_method", "normal")
     if method != "hard_negative":
         result = _train_cv_predictions(train_X, test_X, y, train_meta, config, enabled_models, spw, model_params, seeds)
@@ -786,6 +809,7 @@ def _train_with_method(
 
 
 def run_experiment(config: dict[str, Any]) -> dict[str, Any]:
+    """Run the full experiment and produce metrics, submissions, and summary."""
     print("=== factors ===")
     for item in list_score_factors():
         print(f"- {item}")
@@ -919,6 +943,7 @@ def run_experiment(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
+    """Parse command-line arguments and run one configured experiment."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="Path to experiment JSON config.")
     parser.add_argument("--list-factors", action="store_true", help="Print score factors and exit.")

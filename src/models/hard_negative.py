@@ -63,6 +63,7 @@ def train_two_stage(
     feature_selection_threshold: str = "median",
     model_params: dict[str, dict] | None = None,
 ) -> dict:
+    """Train a first-stage model, mine hard negatives, and refit by CV."""
     if models is None:
         models = ["lgbm", "xgb"]
 
@@ -142,4 +143,3 @@ def predict_two_stage(
         s2_cols = [cols + [meta_col] for cols in s2_cols]
 
     return _predict_with_models(s2_features, s2_models, s2_cols)
-"""困难负样本挖掘模块，用于筛选高置信负样本再训练。"""

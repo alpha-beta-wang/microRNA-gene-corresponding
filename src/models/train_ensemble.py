@@ -21,13 +21,16 @@ import joblib
 class ScaledModel:
     """Wrapper that applies StandardScaler before model predict_proba/predict."""
     def __init__(self, scaler: StandardScaler, model):
+        """Store the scaler and wrapped model behind one prediction interface."""
         self.scaler = scaler
         self.model = model
 
     def predict_proba(self, X):
+        """Scale features before returning model probability predictions."""
         return self.model.predict_proba(self.scaler.transform(X))
 
     def predict(self, X):
+        """Scale features before returning model class predictions."""
         return self.model.predict(self.scaler.transform(X))
 
 
@@ -44,6 +47,7 @@ def _selector_lgbm(seed: int) -> LGBMClassifier:
 
 
 def _base_lgbm(seed: int, params: dict | None = None) -> LGBMClassifier:
+    """Create a LightGBM base learner."""
     defaults = dict(
         n_estimators=3000,
         learning_rate=0.01,
@@ -66,6 +70,7 @@ def _base_lgbm(seed: int, params: dict | None = None) -> LGBMClassifier:
 
 
 def _base_xgb(seed: int, params: dict | None = None) -> XGBClassifier:
+    """Create an XGBoost base learner."""
     defaults = dict(
         n_estimators=3000,
         learning_rate=0.01,
@@ -86,6 +91,7 @@ def _base_xgb(seed: int, params: dict | None = None) -> XGBClassifier:
 
 
 def _base_svm(seed: int, params: dict | None = None) -> SVC:
+    """Create an SVM base learner with probability output."""
     defaults = dict(
         probability=True,
         kernel="rbf",
@@ -99,6 +105,7 @@ def _base_svm(seed: int, params: dict | None = None) -> SVC:
 
 
 def _base_rf(seed: int, params: dict | None = None) -> RandomForestClassifier:
+    """Create a random forest base learner."""
     defaults = dict(
         n_estimators=500,
         max_depth=12,
@@ -114,6 +121,7 @@ def _base_rf(seed: int, params: dict | None = None) -> RandomForestClassifier:
 
 
 def _base_et(seed: int, params: dict | None = None) -> ExtraTreesClassifier:
+    """Create an ExtraTrees base learner."""
     defaults = dict(
         n_estimators=500,
         max_depth=12,
@@ -129,6 +137,7 @@ def _base_et(seed: int, params: dict | None = None) -> ExtraTreesClassifier:
 
 
 def _base_fm(seed: int, params: dict | None = None):
+    """Create a factorization machine base learner."""
     from src.models.factorization_machine import FactorizationMachineClassifier
     defaults = dict(
         n_factors=8,
@@ -192,6 +201,7 @@ def _select_features(
 
 
 def _best_threshold(y_true, proba) -> float:
+    """Search the probability threshold that maximizes F1."""
     best_t = 0.5
     best_f1 = -1.0
     for t in np.linspace(0.1, 0.9, 81):
@@ -213,6 +223,7 @@ def train_ensemble(
     feature_selection_threshold: str = "median",
     model_params: dict[str, dict] | None = None,
 ) -> dict:
+    """Train a cross-validated multi-model ensemble and collect predictions."""
     if models is None:
         models = ["lgbm", "xgb"]
     folds = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
@@ -333,6 +344,7 @@ def predict_ensemble_proba(
 
 
 def optimize_thresholds(results: dict, labels: pd.Series) -> dict:
+    """Search best classification thresholds for model and ensemble outputs."""
     oof_keys = [k for k in results
                 if k.endswith("_oof") and isinstance(results[k], pd.Series)]
     for key in oof_keys:
@@ -353,6 +365,7 @@ def optimize_thresholds(results: dict, labels: pd.Series) -> dict:
 
 
 def save_ensemble_artifacts(results: dict, run_tag: str | None = None) -> None:
+    """Save ensemble models, OOF predictions, and training summaries."""
     prefix = f"{run_tag}_" if run_tag else ""
     OOF_DIR.mkdir(parents=True, exist_ok=True)
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -393,4 +406,3 @@ def save_ensemble_artifacts(results: dict, run_tag: str | None = None) -> None:
             f.write(f"stacker_coef={results['stacker_coef']}\n")
         if "selected_features_per_fold" in results:
             f.write(f"n_selected_per_fold={[len(s) for s in results['selected_features_per_fold']]}\n")
-"""集成模型训练模块，支持多模型、特征选择、stacking 和阈值搜索。"""

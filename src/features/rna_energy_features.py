@@ -71,6 +71,7 @@ def compute_rna_energy_features(
     max_windows: int = 5,
     compute_accessibility: bool = False,
 ) -> pd.DataFrame:
+    """Compute simplified binding energy and accessibility features."""
     _detect_rna_backend()
 
     gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
@@ -138,4 +139,3 @@ def compute_rna_energy_features(
         ]
 
     return features
-"""RNA 能量特征模块，调用 ViennaRNA 估计折叠和双链能量。"""

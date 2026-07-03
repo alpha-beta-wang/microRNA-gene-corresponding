@@ -8,10 +8,12 @@ COMPLEMENT = str.maketrans("ACGUT", "TGCAA")
 
 
 def _reverse_complement(seq: str) -> str:
+    """Return the reverse complement of an RNA or DNA sequence."""
     return seq.translate(COMPLEMENT)[::-1]
 
 
 def _max_consecutive_match(short: str, long: str) -> int:
+    """Compute the longest consecutive match between short and long sequences."""
     if not short or not long:
         return 0
     best = 0
@@ -28,6 +30,7 @@ def _max_consecutive_match(short: str, long: str) -> int:
 
 
 def _count_substring(needle: str, haystack: str) -> int:
+    """Count occurrences of a substring in a target sequence."""
     if not needle or not haystack:
         return 0
     count = 0
@@ -42,6 +45,7 @@ def _count_substring(needle: str, haystack: str) -> int:
 
 
 def compute_match_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract basic seed-match features for miRNA-gene pairs."""
     gene_seq = df[GENE_SEQUENCE_COLUMN].fillna("")
     mirna_seq = df[MIRNA_SEQUENCE_COLUMN].fillna("")
     features = pd.DataFrame(index=df.index)
@@ -99,4 +103,3 @@ def compute_match_features(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return features.fillna(0)
-"""序列匹配特征模块，计算反向互补、连续匹配和命中次数。"""

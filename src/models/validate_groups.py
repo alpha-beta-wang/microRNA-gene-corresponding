@@ -15,6 +15,7 @@ def _run_group_cv(
     groups: pd.Series,
     label: str,
 ) -> None:
+    """Run grouped cross-validation and print per-fold F1 scores."""
     gkf = GroupKFold(n_splits=N_SPLITS)
     oof = pd.Series(np.full(len(labels), 0.5), index=labels.index)
     fold_scores = []
@@ -59,6 +60,7 @@ def run_group_validation(
     labels: pd.Series,
     train: pd.DataFrame,
 ) -> None:
+    """Compare validation behavior under gene, miRNA, and pair grouping."""
     print("=== group validation ===")
     _run_group_cv(features, labels, train[GENE_COLUMN], "gene")
     _run_group_cv(features, labels, train[MIRNA_COLUMN], "miRNA")
@@ -82,4 +84,3 @@ if __name__ == "__main__":
     feats = pd.concat([basic, match], axis=1)
     feats = feats.loc[:, ~feats.columns.duplicated()]
     run_group_validation(feats, bundle.train[TARGET_COLUMN], bundle.train)
-"""分组交叉验证检查工具，用于评估不同分组策略的影响。"""

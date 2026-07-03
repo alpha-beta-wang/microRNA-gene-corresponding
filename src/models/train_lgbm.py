@@ -15,6 +15,7 @@ def train_with_cv(
     n_splits: int = N_SPLITS,
     seed: int = SEED,
 ) -> tuple[pd.Series, float, list[float], list[LGBMClassifier]]:
+    """使用分层交叉验证训练 LightGBM 并返回 OOF 结果。"""
     folds = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
     oof = pd.Series(np.full(len(labels), 0.5), index=labels.index, name="oof")
     fold_scores: list[float] = []
@@ -34,19 +35,19 @@ def train_with_cv(
             colsample_bytree=0.8,
             reg_alpha=0.1,
             reg_lambda=0.1,
-            random_state=seed + fold_idx,
+            random_state=seed + fold_idx,  # 每折使用不同随机种子
             early_stopping_round=100,
             verbose=-1,
         )
         model.fit(
             X_train,
             y_train,
-            eval_set=[(X_val, y_val)],
+            eval_set=[(X_val, y_val)],  # 用当前验证折做早停监控
             eval_metric="logloss",
         )
 
         val_proba = model.predict_proba(X_val)[:, 1]
-        oof.iloc[val_idx] = val_proba
+        oof.iloc[val_idx] = val_proba  # 只回填当前验证折的 OOF 概率
         fold_score = f1_score(y_val, val_proba > 0.5)
         fold_scores.append(fold_score)
         models.append(model)
@@ -55,6 +56,7 @@ def train_with_cv(
 
 
 def optimize_threshold(oof: pd.Series, labels: pd.Series, n_steps: int = 101) -> tuple[float, float]:
+    """在 OOF 概率上搜索 F1 最优阈值。"""
     best_threshold = 0.5
     best_f1 = 0.0
     for t in np.linspace(0.1, 0.9, n_steps):
@@ -71,6 +73,7 @@ def save_artifacts(
     fold_scores: list[float],
     best_threshold: float,
 ) -> None:
+    """保存 OOF 结果、模型文件和交叉验证摘要。"""
     OOF_DIR.mkdir(parents=True, exist_ok=True)
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -79,10 +82,9 @@ def save_artifacts(
     import joblib
 
     for fold_idx, model in enumerate(models):
-        joblib.dump(model, MODEL_DIR / f"lgbm_fold{fold_idx}.pkl")
+        joblib.dump(model, MODEL_DIR / f"lgbm_fold{fold_idx}.pkl")  # 按折保存模型
 
     with open(MODEL_DIR / "cv_info.txt", "w") as f:
         f.write(f"fold_scores={fold_scores}\n")
         f.write(f"mean_cv_f1={float(np.mean(fold_scores)):.6f}\n")
         f.write(f"best_threshold={best_threshold:.4f}\n")
-"""LightGBM 训练模块，包含交叉验证、阈值优化和产物保存。"""
