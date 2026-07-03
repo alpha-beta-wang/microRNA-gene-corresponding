@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -47,8 +48,8 @@ def load_test_frame() -> pd.DataFrame:
     return pd.read_csv(TEST_FILE)
 
 
-def load_gene_sequences() -> pd.DataFrame:
-    frame = pd.read_csv(GENE_SEQUENCE_FILE).rename(
+def _load_gene_sequences_from_path(path: str | Path) -> pd.DataFrame:
+    frame = pd.read_csv(path).rename(
         columns={"label": GENE_COLUMN, "sequence": GENE_SEQUENCE_COLUMN}
     )
     frame[GENE_COLUMN] = frame[GENE_COLUMN].astype(str).str.strip()
@@ -56,13 +57,24 @@ def load_gene_sequences() -> pd.DataFrame:
     return frame.drop_duplicates(subset=[GENE_COLUMN], keep="first")
 
 
-def load_mirna_sequences() -> pd.DataFrame:
-    frame = pd.read_csv(MIRNA_SEQUENCE_FILE).rename(
+
+def load_gene_sequences() -> pd.DataFrame:
+    return _load_gene_sequences_from_path(GENE_SEQUENCE_FILE)
+
+
+
+def _load_mirna_sequences_from_path(path: str | Path) -> pd.DataFrame:
+    frame = pd.read_csv(path).rename(
         columns={"mirna": MIRNA_COLUMN, "seq": MIRNA_SEQUENCE_COLUMN}
     )
     frame[MIRNA_COLUMN] = frame[MIRNA_COLUMN].astype(str).str.strip()
     frame[MIRNA_SEQUENCE_COLUMN] = frame[MIRNA_SEQUENCE_COLUMN].map(clean_sequence)
     return frame.drop_duplicates(subset=[MIRNA_COLUMN], keep="first")
+
+
+
+def load_mirna_sequences() -> pd.DataFrame:
+    return _load_mirna_sequences_from_path(MIRNA_SEQUENCE_FILE)
 
 
 _LABEL_MAP = {"Functional MTI": 1, "Non-Functional MTI": 0}
@@ -92,6 +104,29 @@ def build_dataset_bundle() -> DatasetBundle:
     test = _normalize_pair_columns(load_test_frame())
     gene_sequences = load_gene_sequences()
     mirna_sequences = load_mirna_sequences()
+
+    train_merged = _merge_sequences(train, gene_sequences, mirna_sequences)
+    test_merged = _merge_sequences(test, gene_sequences, mirna_sequences)
+
+    return DatasetBundle(
+        train=train_merged,
+        test=test_merged,
+        train_missing_gene_sequences=int(train_merged[GENE_SEQUENCE_COLUMN].isna().sum()),
+        train_missing_mirna_sequences=int(train_merged[MIRNA_SEQUENCE_COLUMN].isna().sum()),
+        test_missing_gene_sequences=int(test_merged[GENE_SEQUENCE_COLUMN].isna().sum()),
+        test_missing_mirna_sequences=int(test_merged[MIRNA_SEQUENCE_COLUMN].isna().sum()),
+    )
+
+
+
+def build_dataset_bundle_from_root(dataset_root: str | Path) -> DatasetBundle:
+    root = Path(dataset_root)
+    train_dir = root / "train_dataset"
+
+    train = _normalize_pair_columns(pd.read_csv(train_dir / "Train.csv"))
+    test = _normalize_pair_columns(pd.read_csv(root / "test_dataset.csv"))
+    gene_sequences = _load_gene_sequences_from_path(train_dir / "gene_seq.csv")
+    mirna_sequences = _load_mirna_sequences_from_path(train_dir / "mirna_seq.csv")
 
     train_merged = _merge_sequences(train, gene_sequences, mirna_sequences)
     test_merged = _merge_sequences(test, gene_sequences, mirna_sequences)

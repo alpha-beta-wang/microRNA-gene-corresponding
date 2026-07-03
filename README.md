@@ -103,12 +103,53 @@ outputs/
     └── submission_ensemble.csv
 ```
 
+### 7. 当前最佳线上方法
+
+当前以**线上成绩**为准。根据 `best_method.md` 与 `results.csv`，目前最佳提交为：
+
+- `submission_kmer_t46.csv`
+- online F1 = `0.8352`
+
+该方法已经集成在现有代码中，对应入口是：
+
+```bash
+python -m src.experiment_runner --config configs/default_experiment.json
+```
+
+方法组成：
+- 特征：`basic + match + advanced + kmer`
+- 模型：`lgbm + xgb`
+- 融合：5 个随机种子下的均值集成
+- 阈值：`0.46`
+
+### 8. 自动化评测入口
+
+仓库根目录提供了 `test.py`，用于按当前最佳线上方法直接生成提交文件：
+
+```bash
+python test.py
+python test.py --dataset_root data --output submit.csv
+```
+
+`dataset_root` 是**输入文件夹路径**，不是单个 CSV 文件；目录结构必须与当前仓库的 `data/` 一致：
+
+```text
+<dataset_root>/
+├── test_dataset.csv
+├── submit_example.csv
+└── train_dataset/
+    ├── Train.csv
+    ├── gene_seq.csv
+    └── mirna_seq.csv
+```
+
 ---
 
 ## 项目结构
 
 ```
 .
+├── configs/                       # config 驱动实验配置
 ├── data/                          # 原始赛题数据
 │   ├── test_dataset.csv
 │   ├── submit_example.csv
@@ -135,6 +176,7 @@ outputs/
 │   ├── models/
 │   └── submissions/
 ├── requirements.txt               # Python 依赖
+├── test.py                        # 自动化评测入口（当前最佳线上方法）
 ├── .gitignore                     # 排除 .venv/ 和 outputs/
 └── README.md
 ```
@@ -490,7 +532,7 @@ python -m src.run_pipeline --feature-blocks basic,match,position
 # 启用 seed 类型特征（6 特征，无外部依赖）
 python -m src.run_pipeline --feature-blocks basic,match,seed_type
 
-# seed 类型 + kmer + rna_energy + stacking（当前 OOF 最强组合，F1=0.8377）
+# 一个 stacking 实验组合（历史实验记录）
 python -m src.run_pipeline --feature-blocks basic,match,kmer,rna_energy,seed_type --models lgbm,xgb,svm,rf,extratrees,fm --ensemble-mode stacking --missing-external-policy skip
 
 # 使用不同随机种子复现实验
@@ -520,7 +562,7 @@ python -m src.run_pipeline --models svm
 # 单模型 Extra-Trees（6 个模型中单模型最优）
 python -m src.run_pipeline --models extratrees
 
-# 多模型 stacking 集成（最佳策略）
+# 多模型 stacking 集成示例
 python -m src.run_pipeline --models lgbm,xgb,svm,rf,extratrees,fm --feature-blocks basic,match,kmer,rna_energy --ensemble-mode stacking
 
 # 5 模型 stacking（不含 FM）

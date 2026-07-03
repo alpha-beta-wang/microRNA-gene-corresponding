@@ -35,7 +35,7 @@ from src.config import (
     SUBMIT_EXAMPLE_FILE,
     TARGET_COLUMN,
 )
-from src.data.load_data import build_dataset_bundle
+from src.data.load_data import DatasetBundle, build_dataset_bundle
 from src.features.advanced_features import compute_advanced_features
 from src.features.basic_features import compute_sequence_features
 from src.features.dinucleotide_features import compute_dinucleotide_features
@@ -181,8 +181,12 @@ def list_score_factors() -> list[str]:
     ]
 
 
-def build_features(config: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.DataFrame, pd.DataFrame, dict[str, int]]:
-    bundle = build_dataset_bundle()
+def build_features(
+    config: dict[str, Any],
+    bundle: DatasetBundle | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.DataFrame, pd.DataFrame, dict[str, int]]:
+    if bundle is None:
+        bundle = build_dataset_bundle()
     train_blocks = []
     test_blocks = []
     feature_counts: dict[str, int] = {}
