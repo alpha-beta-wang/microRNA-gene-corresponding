@@ -1,4 +1,4 @@
-"""可配置实验运行器，负责特征、模型、融合、输出和飞书记录。"""
+"""Configurable experiment runner for features, models, outputs, and Lark logging."""
 
 from __future__ import annotations
 
@@ -55,15 +55,15 @@ DEFAULT_LARK_TOKEN = "JTGqsBzSlhpTcPtlJ6scOlbenwQ"
 DEFAULT_LARK_SHEET_ID = "c8da76"
 
 FEATURE_CN = {
-    "basic": "??????",
-    "match": "??????",
-    "advanced": "??????",
-    "kmer": "?? k-mer TF-IDF ??",
-    "rna_energy": "RNA ??????",
-    "entity_counts": "gene/miRNA ??????",
-    "seed_variants": "seed ????????",
-    "dinucleotide": "??????????",
-    "targetscan": "TargetScan ??????",
+    "basic": "Basic sequence features",
+    "match": "Sequence match features",
+    "advanced": "Advanced hit features",
+    "kmer": "Character k-mer TF-IDF features",
+    "rna_energy": "RNA energy features",
+    "entity_counts": "gene/miRNA frequency features",
+    "seed_variants": "Seed variant match features",
+    "dinucleotide": "Dinucleotide composition features",
+    "targetscan": "TargetScan-style site features",
 }
 
 
@@ -85,18 +85,19 @@ def save_config(config: dict[str, Any], path: str | Path) -> None:
 def list_score_factors() -> list[str]:
     """Return the score-factor descriptions shown in reports."""
     return [
-        "????????/???????????????????? gene/miRNA ????",
-        "?????gene/miRNA ????????GC ??????",
-        "?????seed ??????? seed ???miRNA ??????????????",
-        "??????????? seed ??????????? AT ??",
-        "k-mer ???miRNA k ??gene k ??TF-IDF min_df?gene ?????",
-        "RNA ????????????seed ?????????????????????",
-        "???????gene/miRNA ?????seed ?????????????",
-        "?????LightGBM?XGBoost?ExtraTrees??????????",
-        "???????????????????????????????????",
-        "?????? seed/? seed?StratifiedKFold/StratifiedGroupKFold?????",
-        "?????????????????????????????",
-        "??????? OOF ??????????????????????",
+        "Data and splits: train/test distribution, fold count, random seeds, and optional gene/miRNA grouping.",
+        "Basic features: gene/miRNA length, base ratios, GC content, and length ratio.",
+        "Match features: seed hits, reverse-complement seed hits, miRNA hits, longest match, and hit counts.",
+        "Advanced hit features: exact reverse-complement seed hit counts and local AT content around hits.",
+        "k-mer features: miRNA k, gene k, TF-IDF min_df, and maximum gene features.",
+        "Biological features: seed types, GU wobble, 3-prime position weights, alignment, and k-mer interactions.",
+        "RNA energy features: ViennaRNA duplex/MFE energy, seed energy, and pairing ratio.",
+        "Representation features: k-mer co-occurrence PPMI with TruncatedSVD dimensions and context windows.",
+        "Model set: LightGBM, XGBoost, ExtraTrees, RandomForest, SVM, KNN, Factorization Machine, and ensembles.",
+        "Model hyperparameters: trees, learning rate, depth, leaves, sampling, class weight, regularization, SVM, and FM settings.",
+        "Training method: single seed, multiple seeds, StratifiedKFold, StratifiedGroupKFold, hard negatives, and hyperopt.",
+        "Post-processing: classification threshold, positive prediction ratio, and optional fixed-top-K cutoff.",
+        "Submission choice: local OOF behavior, test distribution, submission count, and threshold trial order.",
     ]
 
 
@@ -112,20 +113,20 @@ def enabled_feature_names(config: dict[str, Any]) -> list[str]:
 
 FEATURE_CN.update(
     {
-        "basic": "??????",
-        "match": "??????",
-        "advanced": "??????",
-        "kmer": "?? k-mer TF-IDF ??",
-        "rna_energy": "RNA ??????",
-        "entity_counts": "gene/miRNA ??????",
-        "seed_variants": "seed ????????",
-        "dinucleotide": "??????????",
-        "targetscan": "TargetScan ??????",
-        "kmer_interaction": "miRNA-gene ???? k-mer ????",
-        "alignment": "??/????????",
-        "position": "3' ???????",
-        "seed_type": "?? seed ??? GU wobble ??",
-        "embedding": "????? k-mer ?? SVD ????",
+        "basic": "Basic sequence features",
+        "match": "Sequence match features",
+        "advanced": "Advanced hit features",
+        "kmer": "Character k-mer TF-IDF features",
+        "rna_energy": "RNA energy features",
+        "entity_counts": "gene/miRNA frequency features",
+        "seed_variants": "Seed variant match features",
+        "dinucleotide": "Dinucleotide composition features",
+        "targetscan": "TargetScan-style site features",
+        "kmer_interaction": "Reverse-complement k-mer interaction features",
+        "alignment": "Local/global sequence alignment features",
+        "position": "3-prime position weight features",
+        "seed_type": "Canonical seed type and GU wobble features",
+        "embedding": "k-mer co-occurrence SVD embedding features",
     }
 )
 
@@ -133,38 +134,38 @@ FEATURE_CN.update(
 def list_score_factors() -> list[str]:
     """Return the score-factor descriptions shown in reports."""
     return [
-        "????????/???????????????????? gene/miRNA ????",
-        "?????gene/miRNA ????????GC ??????",
-        "?????seed ??????? seed ???miRNA ??????????????",
-        "??????????? seed ??????????? AT ??",
-        "k-mer ???miRNA k ??gene k ??TF-IDF min_df?gene ?????",
-        "?????????? seed ???GU wobble?3' ????????/????????? k-mer ??",
-        "RNA ????????????seed ??????????????????????",
-        "??????????k-mer ?? PPMI + TruncatedSVD embedding ?????????????",
-        "?????LightGBM?XGBoost?ExtraTrees?RandomForest?SVM?KNN?Factorization Machine ???????",
-        "????????????????????????????????????SVM C/gamma?FM ???",
-        "?????? seed/? seed?StratifiedKFold/StratifiedGroupKFold?????",
-        "?????????????????????????????",
-        "??????? OOF ??????????????????????",
+        "Data and splits: train/test distribution, fold count, random seeds, and optional gene/miRNA grouping.",
+        "Basic features: gene/miRNA length, base ratios, GC content, and length ratio.",
+        "Match features: seed hits, reverse-complement seed hits, miRNA hits, longest match, and hit counts.",
+        "Advanced hit features: exact reverse-complement seed hit counts and local AT content around hits.",
+        "k-mer features: miRNA k, gene k, TF-IDF min_df, and maximum gene features.",
+        "Biological features: seed types, GU wobble, 3-prime position weights, alignment, and k-mer interactions.",
+        "RNA energy features: ViennaRNA duplex/MFE energy, seed energy, and pairing ratio.",
+        "Representation features: k-mer co-occurrence PPMI with TruncatedSVD dimensions and context windows.",
+        "Model set: LightGBM, XGBoost, ExtraTrees, RandomForest, SVM, KNN, Factorization Machine, and ensembles.",
+        "Model hyperparameters: trees, learning rate, depth, leaves, sampling, class weight, regularization, SVM, and FM settings.",
+        "Training method: single seed, multiple seeds, StratifiedKFold, StratifiedGroupKFold, hard negatives, and hyperopt.",
+        "Post-processing: classification threshold, positive prediction ratio, and optional fixed-top-K cutoff.",
+        "Submission choice: local OOF behavior, test distribution, submission count, and threshold trial order.",
     ]
 
 
 FEATURE_CN.update(
     {
-        "basic": "基础序列特征",
-        "match": "序列匹配特征",
-        "advanced": "高级命中特征",
-        "kmer": "字符 k-mer TF-IDF 特征",
-        "rna_energy": "RNA 能量特征",
-        "entity_counts": "gene/miRNA 出现频次特征",
-        "seed_variants": "seed 位置变体匹配特征",
-        "dinucleotide": "二核苷酸组成差异特征",
-        "targetscan": "TargetScan 风格位点特征",
-        "kmer_interaction": "miRNA-gene 反向互补 k-mer 交互特征",
-        "alignment": "局部/全局序列比对特征",
-        "position": "3' 端位置权重特征",
-        "seed_type": "经典 seed 类型与 GU wobble 特征",
-        "embedding": "非深度学习 k-mer 共现 SVD 表征特征",
+        "basic": "Basic sequence features",
+        "match": "Sequence match features",
+        "advanced": "Advanced hit features",
+        "kmer": "Character k-mer TF-IDF features",
+        "rna_energy": "RNA energy features",
+        "entity_counts": "gene/miRNA frequency features",
+        "seed_variants": "Seed variant match features",
+        "dinucleotide": "Dinucleotide composition features",
+        "targetscan": "TargetScan-style site features",
+        "kmer_interaction": "Reverse-complement k-mer interaction features",
+        "alignment": "Local/global sequence alignment features",
+        "position": "3-prime position weight features",
+        "seed_type": "Canonical seed type and GU wobble features",
+        "embedding": "k-mer co-occurrence SVD embedding features",
     }
 )
 
@@ -172,19 +173,19 @@ FEATURE_CN.update(
 def list_score_factors() -> list[str]:
     """Return the score-factor descriptions shown in reports."""
     return [
-        "数据与切分：训练/测试分布、交叉验证折数、随机种子、是否按 gene/miRNA 分组切分",
-        "基础特征：gene/miRNA 长度、碱基比例、GC 含量、长度比",
-        "匹配特征：seed 命中、反向互补 seed 命中、miRNA 命中、连续匹配长度、命中次数",
-        "高级命中特征：反向互补 seed 精确命中次数、命中局部 AT 含量",
-        "k-mer 特征：miRNA k 值、gene k 值、TF-IDF min_df、gene 最大特征数",
-        "生物学增强特征：经典 seed 类型、GU wobble、3' 端位置权重、局部/全局比对、反向互补 k-mer 交互",
-        "RNA 能量特征：ViennaRNA duplex/MFE 能量、seed 能量、配对比例",
-        "非深度学习表征特征：k-mer 共现 PPMI + TruncatedSVD embedding 维度、上下文窗口、最小词频",
-        "模型集合：LightGBM、XGBoost、ExtraTrees、RandomForest、SVM、KNN、Factorization Machine 及平均/stacking 集成方式",
-        "模型超参：树数量、学习率、深度、叶子数、采样比例、正负样本权重、正则化、SVM C/gamma、FM 因子数",
-        "训练方法：单 seed/多 seed、StratifiedKFold/StratifiedGroupKFold、hard negative、hyperopt",
-        "后处理：分类阈值、预测正样本比例、是否按固定正样本数量截断",
-        "提交选择：本地 OOF 与线上测试集分布差异、提交次数和阈值试探顺序",
+        "Data and splits: train/test distribution, fold count, random seeds, and optional gene/miRNA grouping.",
+        "Basic features: gene/miRNA length, base ratios, GC content, and length ratio.",
+        "Match features: seed hits, reverse-complement seed hits, miRNA hits, longest match, and hit counts.",
+        "Advanced hit features: exact reverse-complement seed hit counts and local AT content around hits.",
+        "k-mer features: miRNA k, gene k, TF-IDF min_df, and maximum gene features.",
+        "Biological features: seed types, GU wobble, 3-prime position weights, alignment, and k-mer interactions.",
+        "RNA energy features: ViennaRNA duplex/MFE energy, seed energy, and pairing ratio.",
+        "Representation features: k-mer co-occurrence PPMI with TruncatedSVD dimensions and context windows.",
+        "Model set: LightGBM, XGBoost, ExtraTrees, RandomForest, SVM, KNN, Factorization Machine, and ensembles.",
+        "Model hyperparameters: trees, learning rate, depth, leaves, sampling, class weight, regularization, SVM, and FM settings.",
+        "Training method: single seed, multiple seeds, StratifiedKFold, StratifiedGroupKFold, hard negatives, and hyperopt.",
+        "Post-processing: classification threshold, positive prediction ratio, and optional fixed-top-K cutoff.",
+        "Submission choice: local OOF behavior, test distribution, submission count, and threshold trial order.",
     ]
 
 
@@ -486,8 +487,8 @@ def record_experiment_to_lark(config: dict[str, Any], summary: dict[str, Any]) -
     feature_combo = " + ".join(FEATURE_CN.get(name, name) for name in feature_names)
     kmer_cfg = config.get("kmer", {})
     training = config.get("training", {})
-    seeds = "?".join(str(seed) for seed in training.get("seeds", []))
-    fold_strategy = f"{training.get('fold_strategy', 'stratified')} {training.get('n_splits', 5)}?"
+    seeds = ",".join(str(seed) for seed in training.get("seeds", []))
+    fold_strategy = f"{training.get('fold_strategy', 'stratified')} {training.get('n_splits', 5)} folds"
     model_plan = " + ".join(summary.get("models", []))
     spw = f"{summary.get('scale_pos_weight', 0):.4f}"
 
@@ -497,11 +498,11 @@ def record_experiment_to_lark(config: dict[str, Any], summary: dict[str, Any]) -
             [
                 summary.get("experiment_name", ""),
                 feature_combo,
-                "????????GC??????" if "basic" in feature_names else "",
-                "seed???????????????????" if "match" in feature_names else "",
-                "??AT???????seed????" if "advanced" in feature_names else "",
-                f"miRNA k={kmer_cfg.get('mirna_k', '')}?gene k={kmer_cfg.get('gene_k', '')}?gene????={kmer_cfg.get('gene_max_features', '')}"
-                + ("??TargetScan????/??AU/3???" if "targetscan" in feature_names else "")
+                "Length/base-ratio/GC basic features" if "basic" in feature_names else "",
+                "Seed, reverse-complement seed, miRNA hit, and longest-match features" if "match" in feature_names else "",
+                "Local AT content and reverse-complement seed hit count" if "advanced" in feature_names else "",
+                f"miRNA k={kmer_cfg.get('mirna_k', '')}; gene k={kmer_cfg.get('gene_k', '')}; gene max features={kmer_cfg.get('gene_max_features', '')}"
+                + ("; TargetScan seed-site/context AU/3-prime features" if "targetscan" in feature_names else "")
                 if "kmer" in feature_names or "targetscan" in feature_names
                 else "",
                 model_plan,
@@ -540,23 +541,23 @@ def record_experiment_to_lark(config: dict[str, Any], summary: dict[str, Any]) -
     kmer_cfg = config.get("kmer", {})
     embedding_cfg = config.get("embedding", {})
     training = config.get("training", {})
-    seeds = "?".join(str(seed) for seed in training.get("seeds", []))
-    fold_strategy = f"{training.get('fold_strategy', 'stratified')} {training.get('n_splits', 5)}?"
+    seeds = ",".join(str(seed) for seed in training.get("seeds", []))
+    fold_strategy = f"{training.get('fold_strategy', 'stratified')} {training.get('n_splits', 5)} folds"
     model_plan = " + ".join(summary.get("models", []))
     spw = f"{summary.get('scale_pos_weight', 0):.4f}"
 
     extra_feature_notes = []
     if "kmer_interaction" in feature_names:
-        extra_feature_notes.append("???? 3-mer ????")
+        extra_feature_notes.append("reverse-complement 3-mer interactions")
     if "alignment" in feature_names:
-        extra_feature_notes.append("????/seed ??????")
+        extra_feature_notes.append("local/global alignment and seed alignment scores")
     if "position" in feature_names:
-        extra_feature_notes.append("seed ? 3' ????????")
+        extra_feature_notes.append("seed and 3-prime position-weight features")
     if "seed_type" in feature_names:
-        extra_feature_notes.append("8mer/7mer/6mer ??? GU wobble")
+        extra_feature_notes.append("8mer/7mer/6mer site types and GU wobble")
     if "embedding" in feature_names:
         extra_feature_notes.append(
-            "k-mer ?? SVD: "
+            "k-mer co-occurrence SVD: "
             f"k={embedding_cfg.get('k', 3)}, dim={embedding_cfg.get('dim', 12)}, "
             f"context={embedding_cfg.get('context_radius', 2)}, min_count={embedding_cfg.get('min_count', 2)}"
         )
@@ -564,14 +565,14 @@ def record_experiment_to_lark(config: dict[str, Any], summary: dict[str, Any]) -
     kmer_note = ""
     if "kmer" in feature_names:
         kmer_note = (
-            f"miRNA k={kmer_cfg.get('mirna_k', '')}?"
-            f"gene k={kmer_cfg.get('gene_k', '')}?"
-            f"gene ?????={kmer_cfg.get('gene_max_features', '')}"
+            f"miRNA k={kmer_cfg.get('mirna_k', '')}; "
+            f"gene k={kmer_cfg.get('gene_k', '')}; "
+            f"gene max features={kmer_cfg.get('gene_max_features', '')}"
         )
     if "targetscan" in feature_names:
-        kmer_note = (kmer_note + "?" if kmer_note else "") + "TargetScan ????/?? AU/3' ???"
+        kmer_note = (kmer_note + "; " if kmer_note else "") + "TargetScan seed-site/context AU/3-prime features"
     if extra_feature_notes:
-        kmer_note = (kmer_note + "?" if kmer_note else "") + "?".join(extra_feature_notes)
+        kmer_note = (kmer_note + "; " if kmer_note else "") + "; ".join(extra_feature_notes)
 
     rows = []
     for item in summary.get("submissions", []):
@@ -579,9 +580,9 @@ def record_experiment_to_lark(config: dict[str, Any], summary: dict[str, Any]) -
             [
                 summary.get("experiment_name", ""),
                 feature_combo,
-                "????????GC ??????" if "basic" in feature_names else "",
-                "seed ???????????????????" if "match" in feature_names else "",
-                "?? AT ??????? seed ????" if "advanced" in feature_names else "",
+                "Length/base-ratio/GC basic features" if "basic" in feature_names else "",
+                "Seed, reverse-complement seed, miRNA hit, and longest-match features" if "match" in feature_names else "",
+                "Local AT content and reverse-complement seed hit count" if "advanced" in feature_names else "",
                 kmer_note,
                 model_plan,
                 seeds,

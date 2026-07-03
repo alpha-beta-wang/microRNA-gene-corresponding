@@ -1,4 +1,4 @@
-"""实验配置图形界面，封装参数编辑、配置保存和后台运行。"""
+"""Tkinter GUI for editing experiment configs and running experiments."""
 
 from __future__ import annotations
 
@@ -14,20 +14,20 @@ from src.experiment_runner import DEFAULT_CONFIG, load_config, save_config
 
 
 FEATURE_LABELS = {
-    "basic": "??????",
-    "match": "??????",
-    "advanced": "??????",
+    "basic": "Basic sequence",
+    "match": "Sequence match",
+    "advanced": "Advanced hits",
     "kmer": "k-mer TF-IDF",
-    "rna_energy": "RNA ????",
-    "entity_counts": "gene/miRNA ????",
-    "seed_variants": "seed ????",
-    "dinucleotide": "??????",
-    "targetscan": "TargetScan ????",
-    "kmer_interaction": "???? k-mer ??",
-    "alignment": "??/??????",
-    "position": "3' ?????",
-    "seed_type": "?? seed ??/GU wobble",
-    "embedding": "k-mer ?? SVD ??",
+    "rna_energy": "RNA energy",
+    "entity_counts": "Entity counts",
+    "seed_variants": "Seed variants",
+    "dinucleotide": "Dinucleotide",
+    "targetscan": "TargetScan sites",
+    "kmer_interaction": "k-mer interactions",
+    "alignment": "Alignment",
+    "position": "3-prime position",
+    "seed_type": "Seed type/GU wobble",
+    "embedding": "k-mer SVD embedding",
 }
 
 MODEL_LABELS = {
@@ -36,7 +36,7 @@ MODEL_LABELS = {
     "extra_trees": "ExtraTrees",
     "rf": "RandomForest",
     "svm": "SVM",
-    "knn": "KNN ????",
+    "knn": "KNN",
     "fm": "Factorization Machine",
 }
 
@@ -45,7 +45,7 @@ class ExperimentGui(tk.Tk):
     def __init__(self) -> None:
         """Initialize the experiment GUI and its default state."""
         super().__init__()
-        self.title("DataFountain 534 ?????")
+        self.title("DataFountain 534 Experiment GUI")
         self.geometry("1160x800")
         self.minsize(980, 680)
 
@@ -66,11 +66,11 @@ class ExperimentGui(tk.Tk):
         toolbar = ttk.Frame(self, padding=(10, 8))
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
-        ttk.Button(toolbar, text="????", command=self._save_from_ui).pack(side=tk.LEFT, padx=(0, 8))
-        self.run_button = ttk.Button(toolbar, text="????", command=self._run_experiment)
+        ttk.Button(toolbar, text="Save config", command=self._save_from_ui).pack(side=tk.LEFT, padx=(0, 8))
+        self.run_button = ttk.Button(toolbar, text="Run experiment", command=self._run_experiment)
         self.run_button.pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(toolbar, text="??????", command=self._show_config).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Label(toolbar, text="????????????????F1?csv ???????????").pack(
+        ttk.Button(toolbar, text="Show config", command=self._show_config).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Label(toolbar, text="Configure features, models, thresholds, and submissions.").pack(
             side=tk.LEFT,
             padx=(12, 0),
         )
@@ -92,21 +92,21 @@ class ExperimentGui(tk.Tk):
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        ttk.Label(self.form, text="????", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
+        ttk.Label(self.form, text="Features", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
         for name, label in FEATURE_LABELS.items():
             var = tk.BooleanVar()
             self.feature_vars[name] = var
             ttk.Checkbutton(self.form, text=f"{label} ({name})", variable=var).pack(anchor="w", pady=2)
 
-        ttk.Label(self.form, text="????", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(14, 4))
+        ttk.Label(self.form, text="Models", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(14, 4))
         for name, label in MODEL_LABELS.items():
             var = tk.BooleanVar()
             self.model_vars[name] = var
             ttk.Checkbutton(self.form, text=f"{label} ({name})", variable=var).pack(anchor="w", pady=2)
 
-        ttk.Label(self.form, text="????", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(14, 4))
+        ttk.Label(self.form, text="Training", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(14, 4))
         self.combo_vars["training_method"] = tk.StringVar()
-        ttk.Label(self.form, text="????").pack(anchor="w", pady=(4, 0))
+        ttk.Label(self.form, text="Training method").pack(anchor="w", pady=(4, 0))
         ttk.Combobox(
             self.form,
             textvariable=self.combo_vars["training_method"],
@@ -116,7 +116,7 @@ class ExperimentGui(tk.Tk):
         ).pack(anchor="w", fill=tk.X, pady=(0, 3))
 
         self.combo_vars["ensemble_mode"] = tk.StringVar()
-        ttk.Label(self.form, text="????").pack(anchor="w", pady=(4, 0))
+        ttk.Label(self.form, text="Ensemble mode").pack(anchor="w", pady=(4, 0))
         ttk.Combobox(
             self.form,
             textvariable=self.combo_vars["ensemble_mode"],
@@ -126,42 +126,42 @@ class ExperimentGui(tk.Tk):
         ).pack(anchor="w", fill=tk.X, pady=(0, 3))
 
         self.bool_vars["hyperopt_enabled"] = tk.BooleanVar()
-        ttk.Checkbutton(self.form, text="?? hyperopt/Optuna ????", variable=self.bool_vars["hyperopt_enabled"]).pack(
+        ttk.Checkbutton(self.form, text="Enable hyperopt/Optuna", variable=self.bool_vars["hyperopt_enabled"]).pack(
             anchor="w",
             pady=2,
         )
 
         fields = [
-            ("experiment_name", "???"),
-            ("submission_prefix", "??????"),
-            ("seeds", "?????????"),
-            ("n_splits", "??"),
-            ("thresholds", "???????"),
-            ("mirna_k", "miRNA k-mer k"),
-            ("gene_k", "gene k-mer k"),
-            ("gene_max_features", "gene k-mer ?????"),
-            ("embedding_k", "embedding k-mer k"),
-            ("embedding_dim", "embedding SVD ??"),
-            ("embedding_context_radius", "embedding ?????"),
-            ("embedding_min_count", "embedding ????"),
-            ("scale_pos_weight", "?????? auto/??"),
-            ("hard_negative_threshold", "hard negative ??"),
-            ("hard_negative_top_fraction", "hard negative top?????"),
-            ("hyperopt_trials", "hyperopt trial ?"),
+            ("experiment_name", "Experiment name"),
+            ("submission_prefix", "Submission prefix"),
+            ("seeds", "Random seeds"),
+            ("n_splits", "CV folds"),
+            ("thresholds", "Submission thresholds"),
+            ("mirna_k", "miRNA k-mer size"),
+            ("gene_k", "gene k-mer size"),
+            ("gene_max_features", "Max gene k-mer features"),
+            ("embedding_k", "Embedding k-mer size"),
+            ("embedding_dim", "Embedding SVD dim"),
+            ("embedding_context_radius", "Embedding context radius"),
+            ("embedding_min_count", "Embedding min count"),
+            ("scale_pos_weight", "scale_pos_weight auto/value"),
+            ("hard_negative_threshold", "Hard negative threshold"),
+            ("hard_negative_top_fraction", "Hard negative top fraction"),
+            ("hyperopt_trials", "Hyperopt trials"),
         ]
-        ttk.Label(self.form, text="??", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(14, 4))
+        ttk.Label(self.form, text="Parameters", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(14, 4))
         for key, label in fields:
             ttk.Label(self.form, text=label).pack(anchor="w", pady=(4, 0))
             entry = ttk.Entry(self.form, width=48)
             entry.pack(anchor="w", fill=tk.X, pady=(0, 3))
             self.entries[key] = entry
 
-        ttk.Label(right, text="????", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
+        ttk.Label(right, text="Run log", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
         self.log = scrolledtext.ScrolledText(right, font=("Consolas", 10), wrap=tk.WORD)
         self.log.pack(fill=tk.BOTH, expand=True)
         self.log.insert(
             tk.END,
-            "????????????????????????????? F1???? csv ???????????\n",
+            "Edit the configuration, run experiments, and monitor F1 scores and generated CSV files here.\n",
         )
 
     def _load_to_ui(self) -> None:
@@ -240,9 +240,9 @@ class ExperimentGui(tk.Tk):
         try:
             cfg = self._config_from_ui()
             save_config(cfg, self.config_path)
-            self._append_log(f"??????{self.config_path}\n")
+            self._append_log(f"Config saved to {self.config_path}\n")
         except Exception as exc:
-            messagebox.showerror("????", str(exc))
+            messagebox.showerror("Error", str(exc))
 
     def _show_config(self) -> None:
         """Display the configuration generated from the current UI state."""
@@ -250,7 +250,7 @@ class ExperimentGui(tk.Tk):
             cfg = self._config_from_ui()
             self._append_log(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
         except Exception as exc:
-            messagebox.showerror("????", str(exc))
+            messagebox.showerror("Error", str(exc))
 
     def _run_experiment(self) -> None:
         """Validate state and start the experiment worker thread."""
@@ -258,7 +258,7 @@ class ExperimentGui(tk.Tk):
             cfg = self._config_from_ui()
             save_config(cfg, self.config_path)
         except Exception as exc:
-            messagebox.showerror("????", str(exc))
+            messagebox.showerror("Error", str(exc))
             return
         if self.run_button is not None:
             self.run_button.configure(state=tk.DISABLED)
@@ -267,7 +267,7 @@ class ExperimentGui(tk.Tk):
     def _run_worker(self) -> None:
         """Run the experiment command in the background and stream logs."""
         cmd = [sys.executable, "-m", "src.experiment_runner", "--config", str(self.config_path)]
-        self._append_log("?????" + " ".join(cmd) + "\n")
+        self._append_log("Running: " + " ".join(cmd) + "\n")
         proc = subprocess.Popen(
             cmd,
             cwd=PROJECT_ROOT,
@@ -281,7 +281,7 @@ class ExperimentGui(tk.Tk):
         for line in proc.stdout:
             self._append_log(line)
         exit_code = proc.wait()
-        self._append_log(f"?????????{exit_code}\n")
+        self._append_log(f"Process exited with code {exit_code}\n")
         self.after(0, self._enable_run_button)
 
     def _append_log(self, text: str) -> None:
