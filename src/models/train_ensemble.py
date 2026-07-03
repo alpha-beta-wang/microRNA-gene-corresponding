@@ -62,7 +62,6 @@ def _base_lgbm(seed: int, params: dict | None = None) -> LGBMClassifier:
         metric="binary_logloss",
         early_stopping_round=100,
         verbose=-1,
-        scale_pos_weight=scale_pos_weight,
     )
     if params:
         defaults.update(params)
@@ -83,7 +82,6 @@ def _base_xgb(seed: int, params: dict | None = None) -> XGBClassifier:
         early_stopping_rounds=100,
         eval_metric="logloss",
         verbosity=0,
-        scale_pos_weight=scale_pos_weight,
     )
     if params:
         defaults.update(params)
@@ -246,6 +244,8 @@ def train_ensemble(
         results[f"{m}_models"] = []
         results[f"{m}_fold_scores"] = []
 
+    split_iter = folds.split(features, labels)
+
     for fold_idx, (train_idx, val_idx) in enumerate(split_iter):
         X_tr, X_val = features.iloc[train_idx], features.iloc[val_idx]
         y_tr, y_val = labels.iloc[train_idx], labels.iloc[val_idx]
@@ -359,8 +359,9 @@ def optimize_thresholds(results: dict, labels: pd.Series) -> dict:
         results[f"{key}_best_f1"] = best_f1
 
     for prefix in ["lgbm", "xgb", "ensemble"]:
-        ts = results[f"{prefix}_fold_thresholds"]
-        results[f"{prefix}_nested_threshold"] = float(np.median(ts))
+        threshold_key = f"{prefix}_fold_thresholds"
+        if threshold_key in results:
+            results[f"{prefix}_nested_threshold"] = float(np.median(results[threshold_key]))
     return results
 
 
